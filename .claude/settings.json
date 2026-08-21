@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xxd)",
+      "Bash(PYTHONIOENCODING=utf-8 py -3 \"C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\e--1A-DATN-REAL\\\\2d449b21-e8d0-4842-a395-e5154de044cb\\\\scratchpad\\\\insert_case175.py\")",
+      "Bash(PYTHONIOENCODING=utf-8 py -3 -c ' *)",
+      "Bash(py -3 -c \"import jupyter_client, nbclient, nbformat; print\\('ok'\\)\")",
+      "Bash(py -3 -c \"import numpy, scipy, plotly; print\\('numpy',numpy.__version__,'scipy',scipy.__version__,'plotly',plotly.__version__\\)\")",
+      "Bash(where jupyter *)",
+      "Bash(PYTHONIOENCODING=utf-8 py -3 \"C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\e--1A-DATN-REAL\\\\2d449b21-e8d0-4842-a395-e5154de044cb\\\\scratchpad\\\\verify_case175.py\")",
+      "Bash(PYTHONIOENCODING=utf-8 PYTHONPATH=\"e:\\\\1A DATN REAL\" py -3 \"C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\e--1A-DATN-REAL\\\\2d449b21-e8d0-4842-a395-e5154de044cb\\\\scratchpad\\\\verify_case175.py\")"
+    ]
+  }
+}

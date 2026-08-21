@@ -1,0 +1,251 @@
+% =====================================================================
+%  CHAPTER 1 — INTRODUCTION
+% =====================================================================
+\chapter{INTRODUCTION}
+\label{ch:intro}
+
+\section{Background and Motivation}
+\label{sec:motivation}
+Modern society depends heavily on space and radio systems: satellite navigation
+(GNSS/GPS), radio communication, aviation, power grids, and Earth-observation
+satellites. Most of these systems assume that the near-Earth space environment
+stays reasonably stable. When the Sun becomes more active, \emph{space weather
+driven by solar eruptive activity}-flares, coronal mass ejections (CMEs), and
+the geomagnetic storms they cause-happens more often and can be more severe.
+These events can disturb satellites, radio and GNSS links, and power grids. In
+October 2024, NASA and the NOAA Space Weather Prediction Center jointly
+announced that Solar Cycle 25 had reached its maximum
+phase~\citep{nasa_noaa_solarmax2024}. This means solar activity, and its
+practical effects, are especially relevant right now.
+
+A clear example of this impact is the loss of 38 of the 49 Starlink satellites
+launched by SpaceX in February 2022. A geomagnetic storm arrived while the
+satellites were still at low altitude. It heated and expanded the thermosphere,
+which increased atmospheric drag on the satellites much more than expected, and
+most of them re-entered the atmosphere within days~\citep{berger2023starlink}.
+This event shows that space weather is not only a scientific topic; it can
+cause real economic and operational loss. Solar radio bursts (SRBs), which are
+the radio-frequency signal produced by the same eruptive processes, can also
+interfere directly with GNSS. A study of the International GNSS Service network
+over Solar Cycle 24 found that SRBs can lower the carrier-to-noise density
+ratio ($C/N_0$) of GPS and Galileo receivers, and in the worst cases reduce the
+number of usable satellites at a station~\citep{floressoriano2024gnss}. This
+links solar radio emission directly to a radio-frequency-interference problem,
+and it is one reason to keep monitoring solar radio activity from the ground.
+
+To understand and eventually forecast these effects, we need to observe the Sun
+directly, and optical or thermal images alone are not enough: they show the
+visible surface of the Sun but not the processes that actually drive space
+weather. At radio wavelengths, the Sun is not only an optical or thermal
+object; it is also a source that carries information about the coronal plasma,
+energetic particles, and eruptive processes. Radio emission at metre and
+decimetre wavelengths carries information about coronal plasma density and
+temperature, shock fronts, and the energetic electron beams produced during
+flares and CMEs~\citep{dulk1985,kundu1965,wild1963}. Because of this, observing
+the Sun at radio frequencies is one of the oldest parts of radio astronomy, and
+it remains important for space-weather work, since solar radio bursts are an
+early, ground-observable sign of the eruptive events described above.
+
+However, observing the Sun well at radio wavelengths usually means using large
+and expensive equipment. Angular resolution depends on the ratio between the
+observing wavelength and the antenna diameter. To resolve detail on the scale
+of the \SI{32}{\arcminute} solar disk, a single dish would need to be tens of
+metres across, together with the receivers, structure, and site infrastructure
+that such a dish requires. This is difficult to build for most university
+research groups, including those in Vietnam. \emph{Radio
+interferometry}~\citep{tms2017,taylor1999synthesis} offers another way.
+Instead of one large dish, \emph{aperture synthesis} combines the signals from
+several small antennas placed apart from each other. The achievable resolution
+then depends on the largest distance between antennas (the \emph{baseline}),
+not on the size of a single antenna. This is the idea behind synthesis arrays
+such as the historical Culgoora radioheliograph~\citep{mclean1985}, and modern
+arrays like LOFAR~\citep{lofar2013} and the Murchison Widefield
+Array~\citep{mwa2013}. It is also a reasonable direction for a low-cost solar
+radio instrument.
+
+This low-cost, distributed approach is not just an idea used in this thesis; it
+is already an active research direction. DLITE (the Deployable Low-band
+Ionosphere and Transient Experiment) is a four-element, field-deployable
+interferometer that works at \SIrange{30}{40}{\mega\hertz}, built from four
+commercially available LWA-style crossed-dipole antennas~\citep{carson2022dlite}.
+The published total system cost of DLITE, including receivers, digitisers, and
+the rest of the back end, is around US\$45{,}000~\citep{carson2022dlite}, but
+this figure is not what makes the antenna itself low-cost: official LWA
+component pricing lists the crossed-dipole antenna at about \$793, its
+front-end-electronics balun at about \$308, and its ground stake at about
+\$65.50~\citep{lwa_pricing}, so the raw receiving element used by DLITE costs
+on the order of \$1{,}200 per antenna, only a few thousand dollars for all four.
+It is this element-level cost, not the fully-equipped system cost, that makes
+the comparison with a single, tens-of-metres-across dish (Section~1.1)
+meaningful. DLITE was built mainly to study the ionosphere, but it has also
+detected long solar radio bursts, including Type~II and Type~IV events,
+confirmed by independent e-Callisto stations~\citep{carson2022dlite}. This
+shows that a small, distributed, low-cost array is a realistic way to monitor
+solar radio bursts, not only something for large professional facilities.
+
+This thesis works at \SI{610}{\mega\hertz}, in the UHF/decimetric radio band.
+This is a practical choice, not the frequency where the strongest solar radio
+bursts are usually found. Three reasons support it. First, Learmonth/SWS
+already publishes daily solar flux data at \SI{610}{\mega\hertz}, so the
+simulation can use a real, continuous, and freely available dataset instead of
+only a synthetic source. Second, UHF Yagi-Uda antennas at this frequency are
+cheap, easy to buy, and easy to build, which fits a low-cost, university-level
+interferometer. Third, the wavelength at \SI{610}{\mega\hertz} is about
+\SI{0.49}{\metre}, so a baseline of only a few metres to a few tens of metres
+is already enough to produce a clear fringe pattern; this is convenient for
+testing fringe period, visibility, $uv$-coverage, and dirty-image formation on
+a small, deployable array. At the same time, \SI{610}{\mega\hertz} does not
+represent the full picture of solar radio bursts: the strongest Type~II and
+Type~III bursts are usually observed at lower frequencies (tens of MHz),
+closer to the DLITE band described above. The choice of \SI{610}{\mega\hertz}
+in this thesis reflects the available real data, the low antenna cost, and the
+practical UHF direction of the project, not a claim that this band captures
+every kind of solar radio burst.
+
+Building an array like this, however, is harder than just placing several
+antennas in a field. A working interferometer needs receiver channels that stay
+coherent in phase and clock with each other, a receiver noise level that is
+well understood so it can be separated from the weak solar signal, an antenna
+radiation pattern that is actually measured or modelled instead of assumed,
+control of local radio-frequency interference (RFI), and an array layout that
+gives good $uv$-coverage. These are not just theoretical concerns. In my own
+preliminary two-element Yagi-Uda deployment at Xuan~Mai, Hanoi
+(Section~\ref{subsec:field}), the recorded data showed only an ambiguous daily
+trend, not a clean interferometric detection. This was traced to several
+causes: phase-incoherent receiver oscillators, several decibels of cable
+insertion loss, strong local RFI, and a receiver noise floor close to the
+level of the quiet-Sun signal. Because of this experience, before spending
+more effort on hardware for a larger low-cost solar radio interferometer, it
+makes sense to first study and separate these effects in a controlled and
+repeatable way.
+
+This is what a physically grounded, end-to-end \emph{simulation} can provide,
+and it is the subject of this thesis. Instead of treating the antenna, the
+receiver noise, the array geometry, and the imaging step as separate problems,
+the pipeline built in this thesis connects all of them using one real
+observation: archived solar flux from the Learmonth Solar Radio Observatory
+(Space Weather Services, Bureau of Meteorology,
+Australia)~\citep{sws,learmonth_coords}. The flux is converted to a received
+voltage using the Friis transmission formula and Johnson-Nyquist thermal
+noise~\citep{friis1946,nyquist1928}, weighted by a real Yagi-Uda radiation
+pattern modelled in 4NEC2~\citep{nec2} instead of a simplified Gaussian beam,
+propagated through an array geometry to form visibilities, and then correlated
+and inverted into a dirty image and point-spread function. All of this can be
+checked before an array layout is actually built. Existing open-source
+teaching tools such as \textsc{APSYNSIM}~\citep{apsynsim}, developed at the
+Onsala Space Observatory for the Nordic ALMA Regional Centre Interferometry
+School, give interactive visualisations of aperture-synthesis concepts, but
+they use synthetic sky models and simplified Gaussian primary beams, without a
+connection to real flux data, realistic noise, or an actual hardware path.
+This thesis compares its simulation directly against \textsc{APSYNSIM}, to
+show where a pipeline based on real data and real hardware adds value compared
+to a purely educational tool, and also compares it against the field-deployed
+two-element analogue interferometer at Xuan~Mai, to connect the simulation to
+a real, if imperfect, measurement. Building and validating this end-to-end
+simulation-so that array layouts, receiver budgets, and expected signal levels
+can be checked before further field deployment-is the goal of this work.
+
+\section{Problem Statement}
+\label{sec:problem-statement}
+The discussion above points to a gap, not just a list of separate technical
+problems. A future low-cost, distributed UHF solar radio interferometer, of
+the kind described in Section~1.1, should not be designed only by trial and
+error in the field. As the Xuan~Mai deployment showed, an ambiguous result
+from real hardware can come from several different causes at once:
+phase-incoherent receivers, cable loss, local RFI, a weak array geometry, or a
+genuinely weak signal. Without a reference model, it is hard to tell these
+causes apart afterwards. The individual physics is already well understood:
+how an antenna receives a flux density, how thermal receiver noise is added,
+how the geometry of a moving baseline behaves, and how an image is formed from
+correlated visibilities. What is missing is a single, physically grounded
+software model that connects all of these stages using real data, so that the
+behaviour of a proposed instrument can be predicted and checked \emph{before}
+it is built. Without such a model, there is no reliable way to decide, before
+a field deployment, whether a given receiver noise budget, antenna choice, or
+array layout is good enough, or to tell an instrument fault apart from a real
+design limitation. Closing this gap through simulation, rather than through
+more hardware deployment, is the next necessary step, and it is the problem
+this thesis addresses:
+
+\begin{quote}\itshape
+How can a physically grounded, end-to-end simulation be constructed to
+evaluate the feasibility, signal chain, and array-geometry choices of a
+future low-cost UHF solar radio interferometer before hardware deployment?
+\end{quote}
+
+\section{Objectives}
+\label{sec:objectives}
+To answer this question, the thesis pursues four objectives, each covering one
+part of the simulated signal chain described above:
+\begin{enumerate}[leftmargin=1.8em]
+  \item \textbf{Antenna modelling.} Build a Method-of-Moments model of the
+        commercial UHF Yagi-Uda receiving element in 4NEC2, and extract its
+        input impedance, gain, and radiation pattern. Cross-check the result
+        against a direct vector-network-analyser measurement and an
+        independent finite-element solution. Also measure how much mutual
+        coupling exists between elements at different baselines, and confirm
+        that it is small enough to ignore at the separations used in this
+        thesis.
+  \item \textbf{End-to-end signal pipeline.} Build a Python pipeline that
+        converts real SWS Learmonth \SI{610}{\mega\hertz} flux data into
+        complex antenna voltages, using the Friis reception formula and
+        Johnson-Nyquist noise. The pipeline then applies the per-antenna
+        geometric phase, cross-correlates the signals to form visibilities,
+        and inverts them into a dirty image.
+  \item \textbf{General array geometry.} Replace any assumption of a
+        one-dimensional, east-west-only array with a general
+        local-to-equatorial ENU$\rightarrow$XYZ$\rightarrow\uvw$
+        transformation, so that the simulation works for arbitrary
+        two-dimensional array layouts, not just one fixed geometry.
+  \item \textbf{Validation.} Check that the simulated instrument reproduces
+        the expected analytic results-the fringe period, the $\jinc$-shaped
+        visibility of a resolved disk, and the dirty image as the sky
+        convolved with the synthesised beam-using the transit of
+        \mbox{20 March 2025} at Learmonth.
+\end{enumerate}
+
+\section{Contributions}
+\label{sec:contributions-intro}
+The main contributions of this thesis are:
+\begin{enumerate}[leftmargin=1.8em]
+  \item A 4NEC2 Method-of-Moments model of a low-cost commercial UHF Yagi-Uda
+        element, cross-checked against direct measurement and an independent
+        finite-element solution, together with a mutual-coupling study
+        showing that the elements are effectively independent at the
+        operating separations, with coupling below $-78~\si{dB}$ beyond
+        \SI{5}{\metre}.
+  \item A modular, reproducible interferometry simulation engine that works
+        for \emph{arbitrary} two-dimensional array geometries, using one
+        consistent $\uvw$ formulation for per-antenna phase, baseline
+        computation, and fringe stopping.
+  \item A demonstration that the simulated instrument, driven by real
+        archived solar flux, reproduces the classical analytic results of
+        aperture synthesis-directly answering the feasibility question
+        raised in Section~1.2, and validating both the instrument concept
+        and the simulation itself as a design tool.
+  \item A structured comparison between this simulation and
+        \textsc{APSYNSIM}~\citep{apsynsim}, the most widely used open-source
+        aperture-synthesis educational simulator, showing where a pipeline
+        based on real data and real hardware adds value compared to a purely
+        educational tool.
+  \item A reproducible, single-notebook workflow that takes a new user from
+        an archived SWS daily file to a calibrated dirty image in under two
+        minutes of computation, with all parameters set from a single
+        configuration cell.
+\end{enumerate}
+
+\section{Organization of the Thesis}
+The rest of this thesis has five chapters.
+\textbf{Chapter~2} covers the theoretical background: solar radio emission,
+the basics of antenna theory, receiver noise, the principle of interferometry
+and the van Cittert-Zernike theorem, and aperture-synthesis imaging.
+\textbf{Chapter~3} presents the electromagnetic modelling of the Yagi-Uda
+receiving element and the mutual-coupling study of the array.
+\textbf{Chapter~4} describes the design of the end-to-end simulation
+pipeline, from flux-data acquisition through voltage synthesis, array
+geometry, correlation, and imaging.
+\textbf{Chapter~5} reports and analyses the simulation results, including
+validation against analytic predictions and the 20 March 2025 transit.
+The final chapter, \textbf{Conclusion and Future Work}, summarises the
+findings and outlines possible extensions. References and appendices follow.
+\clearpage

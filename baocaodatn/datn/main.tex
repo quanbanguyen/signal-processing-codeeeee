@@ -1,0 +1,315 @@
+% =====================================================================
+%  GRADUATION THESIS — Hanoi University of Science and Technology
+%  Solar Radio Interferometer Simulation at 610 MHz
+%  Author: Nguyen Ba Quan (20224350)
+%
+%  COMPILE WITH:  pdfLaTeX (Standard in VS Code)
+% =====================================================================
+% !TeX program = latexmk
+\documentclass[12pt,a4paper,oneside]{report}
+
+% ---------- Fonts & encoding (Times New Roman look-alike, full VN) ----
+\usepackage[T5]{fontenc}               % Hỗ trợ hiển thị ký tự tiếng Việt
+\usepackage[utf8]{inputenc}            % Hỗ trợ gõ mã UTF-8
+\usepackage{tgtermes}                  % Times New Roman clone cho pdfLaTeX
+
+% ---------- Page geometry (HUST standard) -----------------------------
+\usepackage[a4paper,top=2cm,bottom=2cm,left=3cm,right=2cm]{geometry}
+
+% ---------- Math ------------------------------------------------------
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{bm}
+\usepackage{siunitx}
+\sisetup{detect-all,per-mode=symbol}
+% Force ohm to use math-mode Omega — tgtermes/T5 maps the text-mode glyph to W
+\DeclareSIUnit{\ohm}{\ensuremath{\Omega}}
+
+% ---------- Graphics, tables, layout ----------------------------------
+\usepackage{graphicx}
+\usepackage{overpic}
+\graphicspath{{figures/}}
+% ---- Draft-safe figures: a missing image shows a placeholder box instead
+%      of aborting the build (which would stop VS Code before the ToC pass).
+%      Real images are used automatically once present. Remove if undesired.
+\makeatletter
+\newcommand{\@draftmissingbox}[1]{%
+  \fbox{\parbox[c][2.6cm][c]{0.55\linewidth}{\centering\ttfamily
+  [missing figure]\\ \detokenize{#1}}}}
+\let\@orig@includegraphics\includegraphics
+\renewcommand{\includegraphics}[2][]{%
+  \begingroup\@tempswafalse
+  \IfFileExists{#2}{\@tempswatrue}{}\IfFileExists{#2.pdf}{\@tempswatrue}{}%
+  \IfFileExists{#2.png}{\@tempswatrue}{}\IfFileExists{#2.jpg}{\@tempswatrue}{}%
+  \IfFileExists{figures/#2}{\@tempswatrue}{}\IfFileExists{figures/#2.pdf}{\@tempswatrue}{}%
+  \IfFileExists{figures/#2.png}{\@tempswatrue}{}\IfFileExists{figures/#2.jpg}{\@tempswatrue}{}%
+  \if@tempswa\@orig@includegraphics[#1]{#2}\else\@draftmissingbox{#2}\fi
+  \endgroup}
+\makeatother
+\usepackage{float}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{longtable}
+\usepackage{caption}
+\usepackage{subcaption}
+\captionsetup{font=small,labelfont=bf,labelsep=period}
+\usepackage{enumitem}
+\usepackage[table]{xcolor}
+\usepackage{setspace}
+\onehalfspacing
+\usepackage{microtype}             % font expansion + character protrusion
+\setlength{\emergencystretch}{3em} % last-resort stretch to prevent overfull hbox
+
+% ---------- Headers / footers -----------------------------------------
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0pt}
+
+% ---------- Section / chapter styling (CHAPTER N. TITLE) ---------------
+\usepackage{titlesec}
+\titleformat{\chapter}[hang]
+  {\normalfont\Large\bfseries\filcenter}
+  {CHAPTER \thechapter.}{0.6em}{}
+\titlespacing*{\chapter}{0pt}{10pt}{20pt}
+\titleformat{\section}{\normalfont\large\bfseries}{\thesection}{0.6em}{}
+\titleformat*{\section}{\normalfont\large\bfseries}
+\titleformat{\subsection}{\normalfont\normalsize\bfseries}{\thesubsection}{0.6em}{}
+\titleformat*{\subsection}{\normalfont\normalsize\bfseries}
+
+% ---------- Hyperlinks -------------------------------------------------
+\usepackage[hidelinks]{hyperref}
+\hypersetup{
+  pdftitle={GRADUATION THESIS},
+  pdfauthor={Nguyen Ba Quan},
+}
+
+% ---------- Bibliography ----------------------------------------------
+\usepackage[numbers,sort&compress]{natbib}
+
+% =====================================================================
+%  EDITABLE FIELDS — change these to match your final paperwork
+% =====================================================================
+\newcommand{\thesistitle}{End-to-End Simulation of a Four-Element UHF Radio Interferometer for Solar Radio Observation at 610~MHz}
+\newcommand{\studentname}{Nguyen Ba Quan}
+\newcommand{\studentid}{20224350}
+\newcommand{\studentemail}{quan.nb224350@sis.hust.edu.vn}
+\newcommand{\studentnameVN}{Nguyễn Bá Quân}
+\newcommand{\supervisor}{Ha Duyen Trung}
+\newcommand{\supervisorVN}{Hà Duyên Trung}
+\newcommand{\programme}{Electronics and Telecommunications Engineering (Bachelor of Science)}
+\newcommand{\department}{Department of Communication Engineering}
+\newcommand{\school}{School of Electrical and Electronic Engineering}
+\newcommand{\submitplacedate}{HANOI, 06/2026}
+
+% ---------- Eval-form helpers (eval_forms.tex) ------------------------
+\definecolor{LightCyan}{rgb}{0.88,1,1}
+\newcolumntype{s}{>{\hsize=0.5\hsize\centering\arraybackslash}X}
+\newcolumntype{g}{>{\hsize=3.5\hsize\arraybackslash}X}
+\newcolumntype{d}{>{\hsize=0.6\hsize\centering\arraybackslash}X}
+\newcommand{\rpt}[2][1]{%
+  \ifcase#1\relax
+  \or#2%
+  \or#2#2%
+  \or#2#2#2%
+  \or#2#2#2#2%
+  \or#2#2#2#2#2%
+  \or#2#2#2#2#2#2%
+  \fi
+}
+
+% Handy math shortcuts used across chapters
+\newcommand{\uvw}{(u,v,w)}
+\newcommand{\sfu}{\mathrm{sfu}}
+\DeclareMathOperator{\sinc}{sinc}
+\DeclareMathOperator{\jinc}{jinc}
+
+% Allow \texttt{} to break at underscores so long code identifiers
+% (e.g. CLOCK_OFFSET_NS, UFRAME_primary_beam_610MHz) do not overflow the margin.
+\let\OrigTexttt\texttt
+\renewcommand{\texttt}[1]{%
+  \OrigTexttt{\begingroup
+    \def\_{\textunderscore\penalty0\relax}%
+  #1\endgroup}}
+
+\begin{document}
+\renewcommand{\thepage}{\roman{page}}   % front matter in roman numerals
+\setcounter{page}{1}
+
+% =====================================================================
+%  TITLE PAGE
+% =====================================================================
+\begin{titlepage}
+\thispagestyle{empty}
+\begin{center}
+{\large\bfseries HANOI UNIVERSITY OF SCIENCE AND TECHNOLOGY}\\[2.2cm]
+
+{\Huge\bfseries GRADUATION THESIS}\\[1.1cm]
+
+{\large\bfseries \thesistitle}\\[1.4cm]
+
+{\large\bfseries \studentname}\\[0.2cm]
+{\studentemail}\\[1.0cm]
+
+{\large\bfseries \programme}\\[2.4cm]
+\end{center}
+
+\noindent
+\begin{tabular}{@{}p{3.0cm}>{\raggedright\arraybackslash}p{7.2cm}p{4.5cm}@{}}
+\textbf{Supervisor:} & Assoc. Prof. Dr. Ha Duyen Trung & \\[0.2cm]
+                     &             & \rule{4cm}{0.4pt}\\
+                     &             & \hfil Signature\hfil\\[0.6cm]
+\textbf{Department:} & Department of Communication\newline Engineering & \\[0.3cm]
+\textbf{School:}     & School of Electrical and\newline Electronic Engineering & \\
+\end{tabular}
+
+\vfill
+\begin{center}
+{\bfseries \submitplacedate}
+\end{center}
+\end{titlepage}
+
+% =====================================================================
+%  EVALUATION FORMS (HUST standard — Vietnamese)
+% =====================================================================
+\input{chapters/eval_forms}
+
+% =====================================================================
+%  ACKNOWLEDGMENT
+% =====================================================================
+\chapter*{ACKNOWLEDGMENT}
+\addcontentsline{toc}{chapter}{ACKNOWLEDGMENT}
+\thispagestyle{fancy}
+
+Completing this graduation thesis marks the end of four years at Hanoi University of Science and Technology. For me, it is a wonderful experience of learning and researching in a creative and competitive environment. 
+
+But to have me today, it is the sacrifice and companionship of my parents, who have always cheered and encouraged me and been by my side, and I am always proud of them. I am grateful and thankful to my parents; no words can express this deep gratitude.
+
+Moreover, I am profoundly grateful to all the teachers who imparted their knowledge and wisdom. I especially want to thank Prof. Han Huy Dung and Prof. Ha Duyen Trung for their patient guidance and the many hours of technical discussions in the SPARC Lab. Prof. Han Huy Dung helped me so much in stepping into the world of radio astronomy, along with Prof. Vo Bich Hien, one of his colleagues in this field. Bringing me into the lab gave me the opportunity to work with the members of the SPARC Laboratory, set up real-time solar radio burst detection antennas, and access the measurement hardware that motivated this simulation work. I consider myself incredibly fortunate to have had their mentorship, guiding me through the challenges and triumphs of my studies. 
+
+Finally, I want to express my commitment to myself: to always stay focused and never give up, even in the most difficult areas of the telecommunication engineering major. Hanoi University of Science and Technology will forever be my second home, the place that helped me grow into a real telecommunication engineer, especially in the field of radio astronomy.
+
+
+\vspace{1cm}
+\hfill\begin{minipage}{6cm}
+\centering
+\textit{Student}\\
+\textit{(Signature and full name)}\\[1.6cm]
+\studentname
+\end{minipage}
+
+% =====================================================================
+%  ABSTRACT
+% =====================================================================
+\chapter*{ABSTRACT}
+\addcontentsline{toc}{chapter}{ABSTRACT}
+
+Space weather driven by solar eruptive activity-flares, coronal mass ejections, and
+the geomagnetic storms they cause-can disrupt satellites, GNSS links, and power
+grids, as illustrated by the 2022 loss of 38 Starlink satellites to a geomagnetic
+storm and by documented degradation of GNSS carrier-to-noise ratios during solar
+radio bursts (SRBs). SRBs are an early, ground-observable signature of these
+eruptive events, but resolving them with a single large dish is costly, since
+angular resolution scales with antenna diameter. Radio interferometry-combining
+several small antennas into an aperture-synthesis array, so that resolution instead
+depends on the baseline between them-offers a low-cost alternative, a direction
+already pursued by projects such as DLITE (the Deployable Low-band Ionosphere and
+Transient Experiment), a four-element, low-cost array that has itself detected solar
+radio bursts. This thesis pursues the same low-cost, distributed philosophy at
+\SI{610}{\mega\hertz}, motivated in part by a preliminary two-element Yagi-Uda field
+deployment at Xuan~Mai, Hanoi, that produced only an ambiguous daily trend rather
+than a clean interferometric detection, a result traced to phase-incoherent receiver
+oscillators, cable insertion loss, local radio-frequency interference, and a noise
+floor close to the quiet-Sun signal level. Rather than debug these effects directly
+in further hardware iterations, this thesis presents the design and validation of a
+complete, physically grounded software simulation of a four-element UHF radio
+interferometer, built to separate and quantify such effects in a controlled,
+repeatable way, to demonstrate that such an array reproduces the classical
+signatures of aperture-synthesis imaging, and to quantify the gap between the
+simulation model and the hardware measurement.
+
+The work proceeds in three coupled stages. First, the receiving element, a
+commercial UHF Yagi-Uda antenna with a folded-dipole driven element on a
+four-bar U-frame reflector, is modelled in 4NEC2 and cross-validated against direct
+measurement and an independent finite-element solution. The simulated element exhibits an input impedance of
+$Z_\mathrm{in}\approx (108 - j22)\,\si{\ohm}$, a forward gain of about \SI{9.5}{dBi}, a
+half-power beamwidth near \SI{52}{\degree}, and a standing-wave ratio of $1.55$ at
+\SI{75}{\ohm}; mutual coupling between elements is found to be negligible across the
+operational baselines (falling below $-78~\si{dB}$ beyond \SI{5}{\metre}), confirming
+that the elements behave as independent sensors. Second, an end-to-end signal-processing pipeline is built in
+Python. Real archived solar flux from the SWS Learmonth observatory is converted to
+complex antenna voltages through the Friis reception relation with additive
+Johnson-Nyquist thermal noise; per-antenna geometric phases are applied using a
+standard local-to-equatorial ENU$\rightarrow$XYZ$\rightarrow\uvw$ transformation;
+the signals are cross-correlated to form visibilities; and the visibilities are
+inverted by a vectorised discrete Fourier transform to a dirty image. Third, the simulated instrument is
+exercised over the 20~March~2025 transit at Learmonth station in Australia and over a sweep of
+array geometries, including a DLITE-inspired, non-redundant triangle-plus-centre
+topology that recovers substantially better North-South resolution than a symmetric
+layout using the same four elements. The 20~March~2025 date is also used for a
+diagnostic comparison of the simulated solar excess
+against a total-power trace from a two-element analogue interferometer deployed
+at Hoa~L\d{a}c, Hanoi; a factor of $23.8\times$ gap in SNR is attributed to the
+high system temperature of the consumer SDR receiver ($T_{\rm sys,eff}\approx3\,600$~K).
+
+The simulated interferometer reproduces the expected analytic behaviour: a
+\mbox{$\sim$14-minute} fringe period for the \SI{8}{\metre} baseline at the spring equinox
+($\delta=0^\circ$), a
+$\jinc$-shaped visibility decay as a function of baseline length consistent with a
+resolved solar disk, and a dirty image equal to the true sky convolved with the
+synthesised point-spread function. These results confirm that the simulation faithfully captures the physics from
+incident flux to final image at the analytic level.  The hardware comparison further
+shows that the primary gap between model and measurement is system temperature, not
+signal-chain modelling, a finding that directly guides hardware upgrade priorities.
+
+\paragraph{Keywords:} radio interferometry, aperture synthesis, solar radio bursts,
+Yagi-Uda antenna, 4NEC2, van Cittert-Zernike theorem, dirty image, point-spread function.
+
+% =====================================================================
+%  TABLE OF CONTENTS / LISTS
+% =====================================================================
+\renewcommand{\contentsname}{TABLE OF CONTENTS}
+\tableofcontents
+\clearpage
+
+\renewcommand{\listfigurename}{LIST OF FIGURES}
+\listoffigures
+\clearpage
+
+\renewcommand{\listtablename}{LIST OF TABLES}
+\listoftables
+\clearpage
+
+\InputIfFileExists{chapters/abbreviations}{}{\par\noindent\texttt{\detokenize{[chapters/abbreviations.tex not found]}}\par}
+
+% =====================================================================
+%  MAIN MATTER
+% =====================================================================
+\clearpage
+\renewcommand{\thepage}{\arabic{page}}
+\setcounter{page}{1}
+
+\InputIfFileExists{chapters/intro}{}{\par\noindent\texttt{\detokenize{[chapters/intro.tex not found]}}\par}
+\InputIfFileExists{chapters/ch2_theory}{}{\par\noindent\texttt{\detokenize{[chapters/ch2_theory.tex not found]}}\par}
+\InputIfFileExists{chapters/ch3_antenna}{}{\par\noindent\texttt{\detokenize{[chapters/ch3_antenna.tex not found]}}\par}
+\InputIfFileExists{chapters/ch4_pipeline}{}{\par\noindent\texttt{\detokenize{[chapters/ch4_pipeline.tex not found]}}\par}
+\InputIfFileExists{chapters/ch5_results}{}{\par\noindent\texttt{\detokenize{[chapters/ch5_results.tex not found]}}\par}
+\InputIfFileExists{chapters/conclusion}{}{\par\noindent\texttt{\detokenize{[chapters/conclusion.tex not found]}}\par}
+
+% =====================================================================
+%  BIBLIOGRAPHY
+% =====================================================================
+\clearpage
+\addcontentsline{toc}{chapter}{REFERENCES}
+\renewcommand{\bibname}{REFERENCES}
+\bibliographystyle{unsrtnat}  % natbib-compatible numbered, unsorted
+\bibliography{refs}
+
+% =====================================================================
+%  APPENDIX
+% =====================================================================
+\InputIfFileExists{chapters/appendix_github}{}{\par\noindent\texttt{\detokenize{[chapters/appendix_github.tex not found]}}\par}
+
+\end{document}

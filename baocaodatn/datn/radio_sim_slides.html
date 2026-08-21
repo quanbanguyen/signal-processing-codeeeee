@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Radio Interferometry Simulator — Slides</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --bg:#0d1117;
+  --bg2:#161b22;
+  --bg3:#21262d;
+  --border:#30363d;
+  --text:#e6edf3;
+  --muted:#8b949e;
+  --blue:#58a6ff;
+  --green:#3fb950;
+  --yellow:#d29922;
+  --red:#f85149;
+  --purple:#bc8cff;
+}
+
+body{
+  font-family:'Segoe UI',system-ui,sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  height:100vh;
+  overflow:hidden;
+  user-select:none;
+}
+
+/* ── SLIDE CONTAINER ── */
+#deck{
+  position:relative;
+  width:100%;
+  height:100vh;
+  overflow:hidden;
+}
+
+.slide{
+  position:absolute;
+  inset:0;
+  display:flex;
+  flex-direction:column;
+  padding:52px 72px 72px;
+  opacity:0;
+  transform:translateX(60px);
+  transition:opacity .35s ease, transform .35s ease;
+  pointer-events:none;
+}
+.slide.active{
+  opacity:1;
+  transform:translateX(0);
+  pointer-events:all;
+}
+.slide.exit{
+  opacity:0;
+  transform:translateX(-60px);
+}
+
+/* ── PROGRESS BAR ── */
+#progress{
+  position:fixed;
+  bottom:0;
+  left:0;
+  height:3px;
+  background:var(--blue);
+  transition:width .35s ease;
+  z-index:100;
+}
+
+/* ── NAV DOTS ── */
+#nav{
+  position:fixed;
+  bottom:14px;
+  left:50%;
+  transform:translateX(-50%);
+  display:flex;
+  gap:8px;
+  z-index:100;
+}
+.dot{
+  width:7px;height:7px;
+  border-radius:50%;
+  background:var(--border);
+  cursor:pointer;
+  transition:background .2s, transform .2s;
+}
+.dot.active{background:var(--blue);transform:scale(1.35)}
+
+/* ── SLIDE NUMBER ── */
+#slide-num{
+  position:fixed;
+  bottom:11px;
+  right:22px;
+  font-size:10px;
+  color:var(--muted);
+  z-index:100;
+}
+
+/* ── SLIDE NAV ARROWS ── */
+.nav-arrow{
+  position:fixed;
+  top:50%;
+  transform:translateY(-50%);
+  background:var(--bg3);
+  border:1px solid var(--border);
+  border-radius:50%;
+  width:38px;height:38px;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;
+  color:var(--muted);
+  font-size:16px;
+  z-index:100;
+  transition:all .15s;
+  opacity:.55;
+}
+.nav-arrow:hover{opacity:1;color:var(--blue);border-color:var(--blue)}
+#nav-prev{left:14px}
+#nav-next{right:14px}
+
+/* ── TYPOGRAPHY ── */
+.tag{
+  display:inline-block;
+  background:var(--bg3);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:3px 11px;
+  font-size:11px;
+  color:var(--muted);
+  margin-bottom:18px;
+}
+h1{font-size:2.6rem;font-weight:700;line-height:1.2;color:var(--blue)}
+h2{font-size:1.55rem;font-weight:600;color:var(--blue);margin-bottom:22px}
+h3{font-size:1rem;font-weight:600;color:var(--text);margin-bottom:8px}
+p{font-size:.95rem;color:var(--muted);line-height:1.7}
+code{
+  background:var(--bg3);
+  border-radius:4px;
+  padding:1px 6px;
+  font-size:.88em;
+  color:#79c0ff;
+  font-family:'Cascadia Code','Consolas',monospace;
+}
+
+/* ── LAYOUT HELPERS ── */
+.row{display:flex;gap:20px;flex:1;min-height:0}
+.col{flex:1;display:flex;flex-direction:column}
+
+/* ── CARD ── */
+.card{
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:16px 18px;
+}
+.card+.card{margin-top:12px}
+
+/* ── BADGE ── */
+.badge{
+  background:var(--bg3);
+  border:1px solid var(--border);
+  border-radius:6px;
+  padding:2px 8px;
+  font-size:11px;
+  color:var(--blue);
+  white-space:nowrap;
+}
+
+/* ── CHIP LIST ── */
+.chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px}
+.chip{
+  background:rgba(88,166,255,.1);
+  border:1px solid rgba(88,166,255,.3);
+  border-radius:20px;
+  padding:4px 12px;
+  font-size:12px;
+  color:var(--blue);
+}
+
+/* ── STEP LIST ── */
+.steps{list-style:none;display:flex;flex-direction:column;gap:13px;flex:1}
+.steps li{
+  display:flex;
+  align-items:flex-start;
+  gap:14px;
+  font-size:.92rem;
+  color:var(--muted);
+  line-height:1.55;
+}
+.steps li b{color:var(--text)}
+.step-num{
+  min-width:26px;height:26px;
+  border-radius:50%;
+  background:rgba(88,166,255,.15);
+  border:1px solid rgba(88,166,255,.4);
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:700;
+  color:var(--blue);
+  margin-top:1px;
+}
+
+/* ── TAB GRID (slide 3) ── */
+.tab-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+  flex:1;
+}
+.tab-card{
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:16px 18px;
+  display:flex;flex-direction:column;gap:6px;
+  transition:border-color .2s;
+}
+.tab-card:hover{border-color:var(--blue)}
+.tab-card .icon{font-size:22px;margin-bottom:4px}
+.tab-card h3{font-size:.95rem}
+.tab-card p{font-size:.82rem}
+
+/* ── CASE TABLE (slide 4) ── */
+.case-table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:.88rem;
+  margin-top:8px;
+}
+.case-table th{
+  color:var(--muted);
+  font-weight:500;
+  padding:8px 14px;
+  text-align:left;
+  border-bottom:1px solid var(--border);
+  font-size:.8rem;
+  text-transform:uppercase;
+  letter-spacing:.5px;
+}
+.case-table td{
+  padding:10px 14px;
+  border-bottom:1px solid rgba(48,54,61,.5);
+  color:var(--text);
+}
+.case-table tr:hover td{background:rgba(33,38,45,.6)}
+.case-tag{
+  display:inline-block;
+  border-radius:4px;
+  padding:2px 7px;
+  font-size:10px;
+  font-weight:700;
+}
+.c1{background:rgba(88,166,255,.15);color:#58a6ff}
+.c2{background:rgba(63,185,80,.15);color:#3fb950}
+.c3{background:rgba(210,153,34,.15);color:#d29922}
+.c4{background:rgba(188,140,255,.15);color:#bc8cff}
+.c5{background:rgba(248,81,73,.15);color:#f85149}
+
+/* ── UV DIAGRAM (slide 5) ── */
+.uv-box{
+  background:var(--bg);
+  border:1px solid var(--border);
+  border-radius:10px;
+  flex:1;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  position:relative;
+  overflow:hidden;
+  min-height:0;
+}
+svg text{font-family:'Segoe UI',sans-serif}
+
+/* ── FORMULA BOX ── */
+.formula{
+  background:rgba(88,166,255,.07);
+  border:1px solid rgba(88,166,255,.25);
+  border-radius:8px;
+  padding:12px 18px;
+  font-size:1.05rem;
+  color:var(--blue);
+  text-align:center;
+  font-family:'Cascadia Code','Consolas',monospace;
+  letter-spacing:.3px;
+}
+
+/* ── SLIDE 1 SPECIFIC ── */
+#s1 .sub{font-size:1.05rem;color:var(--muted);margin-top:12px;line-height:1.7}
+#s1 .badges{display:flex;gap:8px;margin-top:24px;flex-wrap:wrap}
+#s1 .hero{flex:1;display:flex;flex-direction:column;justify-content:center}
+#s1 .deco{
+  position:absolute;right:72px;top:50%;transform:translateY(-50%);
+  opacity:.08;font-size:220px;pointer-events:none;
+  line-height:1;
+}
+
+/* ── SLIDE 2 SPECIFIC ── */
+.layout-diagram{
+  flex:1;
+  display:flex;
+  gap:10px;
+  min-height:0;
+}
+.ld-sidebar{
+  width:200px;
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:12px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  flex-shrink:0;
+}
+.ld-main{
+  flex:1;
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:10px;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+.ld-tabs{
+  display:flex;
+  border-bottom:1px solid var(--border);
+  padding:0 8px;
+}
+.ld-tab{
+  padding:7px 11px;
+  font-size:10px;
+  color:var(--muted);
+  cursor:default;
+  border-bottom:2px solid transparent;
+}
+.ld-tab.on{color:var(--blue);border-bottom-color:var(--blue)}
+.ld-panel{flex:1;padding:12px;display:flex;align-items:center;justify-content:center}
+.ld-sect{
+  background:var(--bg3);
+  border-radius:6px;
+  padding:7px 9px;
+  font-size:10px;
+  color:var(--muted);
+}
+.ld-sect .label{color:var(--blue);font-size:9px;font-weight:600;margin-bottom:3px}
+.ld-param{
+  background:var(--bg);
+  border:1px solid var(--border);
+  border-radius:4px;
+  padding:3px 6px;
+  font-size:10px;
+  color:var(--text);
+  margin-top:4px;
+}
+.ld-slider{
+  height:3px;
+  background:linear-gradient(to right,var(--blue) 60%,var(--border) 60%);
+  border-radius:2px;
+  margin-top:5px;
+  position:relative;
+}
+.ld-slider::after{
+  content:'';position:absolute;left:60%;top:-3px;
+  width:8px;height:8px;border-radius:50%;background:var(--blue);
+  transform:translateX(-50%);
+}
+
+/* ── SLIDE 6 SPECIFIC ── */
+.how-row{display:flex;gap:16px;flex:1;min-height:0}
+.how-step{
+  flex:1;
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:18px;
+  display:flex;flex-direction:column;
+  align-items:center;
+  text-align:center;
+  gap:10px;
+}
+.how-step .num{
+  width:36px;height:36px;
+  border-radius:50%;
+  background:rgba(88,166,255,.15);
+  border:1px solid rgba(88,166,255,.4);
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;font-weight:700;
+  color:var(--blue);
+}
+.how-step .icon2{font-size:26px}
+.how-step h3{font-size:.88rem;color:var(--text)}
+.how-step p{font-size:.8rem}
+</style>
+</head>
+<body>
+
+<div id="deck">
+
+<!-- ══════════════════════════════════════════════════════════
+     SLIDE 1 — TITLE
+══════════════════════════════════════════════════════════ -->
+<div class="slide active" id="s1">
+  <div style="position:absolute;right:72px;top:50%;transform:translateY(-50%);opacity:.06;font-size:200px;pointer-events:none;line-height:1">📡</div>
+
+  <div class="hero">
+    <div class="tag">Đồ án tốt nghiệp · HUST · 2025</div>
+    <h1>Công cụ mô phỏng<br>Giao thoa Vô tuyến</h1>
+    <p class="sub" style="margin-top:14px">
+      Trình duyệt tương tác minh họa toàn bộ pipeline mô phỏng —<br>
+      từ dữ liệu SWS thực đến ảnh dirty image — không cần cài đặt.
+    </p>
+    <div class="badges">
+      <span class="badge">📡 Engine A + B</span>
+      <span class="badge">🌐 Standalone HTML</span>
+      <span class="badge">⚡ Real-time update</span>
+      <span class="badge">🎯 Learmonth 610 MHz</span>
+      <span class="badge">📂 Load SWS thực</span>
+    </div>
+  </div>
+
+  <div style="border-top:1px solid var(--border);padding-top:16px;display:flex;justify-content:space-between;align-items:center">
+    <span style="font-size:12px;color:var(--muted)"><code>radio_sim.html</code></span>
+    <span style="font-size:12px;color:var(--muted)">Mảng EW 4 anten · δ = 0° · b<sub>max</sub> = 24 m</span>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     SLIDE 2 — GIAO DIỆN TỔNG QUAN
+══════════════════════════════════════════════════════════ -->
+<div class="slide" id="s2">
+  <div class="tag">Kiến trúc giao diện</div>
+  <h2>Sidebar điều khiển + 5 Tab hiển thị</h2>
+
+  <div class="layout-diagram">
+    <!-- Sidebar mockup -->
+    <div class="ld-sidebar">
+      <div style="font-size:11px;font-weight:600;color:var(--blue);margin-bottom:2px">📡 Điều khiển</div>
+
+      <div class="ld-sect">
+        <div class="label">📂 DỮ LIỆU SWS</div>
+        <div style="background:var(--bg);border:1px dashed var(--border);border-radius:4px;padding:5px;font-size:9px;color:var(--muted);text-align:center">📁 Chọn file .txt…</div>
+        <div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:4px">
+          <div style="background:rgba(88,166,255,.2);border:1px solid var(--blue);border-radius:3px;padding:2px 5px;font-size:9px;color:var(--blue)">610</div>
+          <div style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:2px 5px;font-size:9px;color:var(--muted)">245</div>
+          <div style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:2px 5px;font-size:9px;color:var(--muted)">1415</div>
+          <div style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:2px 5px;font-size:9px;color:var(--muted)">2695</div>
+        </div>
+      </div>
+
+      <div class="ld-sect">
+        <div class="label">📐 MẢNG ANTEN</div>
+        <div class="ld-param">Case 1 · EW compact</div>
+        <div style="font-size:9px;color:var(--muted);margin-top:4px">4 anten · [0, 8, 16, 24] m</div>
+      </div>
+
+      <div class="ld-sect">
+        <div class="label">🌍 QUAN TRẮC</div>
+        <div style="font-size:9px;color:var(--muted);margin-bottom:3px">Tần số (MHz)</div>
+        <div class="ld-slider"></div>
+        <div style="font-size:9px;color:var(--muted);margin-top:6px;margin-bottom:3px">Xích vĩ δ (°)</div>
+        <div class="ld-slider" style="background:linear-gradient(to right,var(--border) 50%,var(--purple) 50%)">
+          <span style="position:absolute;left:50%;top:-3px;width:8px;height:8px;border-radius:50%;background:var(--purple);transform:translateX(-50%)"></span>
+        </div>
+      </div>
+
+      <div style="background:#1f6feb;border-radius:6px;padding:6px;font-size:10px;color:#fff;text-align:center;font-weight:600">▶ Cập nhật tất cả</div>
+    </div>
+
+    <!-- Main tabs mockup -->
+    <div class="ld-main">
+      <div class="ld-tabs">
+        <div class="ld-tab on">🌞 Flux</div>
+        <div class="ld-tab">📐 Mảng&UV</div>
+        <div class="ld-tab">∿ Vân</div>
+        <div class="ld-tab">🖼 Ảnh</div>
+        <div class="ld-tab">ℹ Info</div>
+      </div>
+      <div class="ld-panel">
+        <!-- Fake flux chart -->
+        <svg width="100%" height="140" viewBox="0 0 500 140">
+          <defs>
+            <linearGradient id="fluxGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#58a6ff" stop-opacity=".4"/>
+              <stop offset="100%" stop-color="#58a6ff" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          <!-- axes -->
+          <line x1="40" y1="10" x2="40" y2="120" stroke="#30363d" stroke-width="1"/>
+          <line x1="40" y1="120" x2="480" y2="120" stroke="#30363d" stroke-width="1"/>
+          <!-- bell curve fill -->
+          <path d="M60,115 Q120,115 180,70 Q260,10 300,10 Q340,10 420,70 Q460,95 470,115 Z" fill="url(#fluxGrad)"/>
+          <!-- bell curve line -->
+          <path d="M60,115 Q120,115 180,70 Q260,10 300,10 Q340,10 420,70 Q460,95 470,115" fill="none" stroke="#58a6ff" stroke-width="2"/>
+          <!-- transit line -->
+          <line x1="300" y1="10" x2="300" y2="120" stroke="#3fb950" stroke-width="1" stroke-dasharray="4,3"/>
+          <text x="304" y="22" fill="#3fb950" font-size="9">Transit</text>
+          <!-- y label -->
+          <text x="10" y="68" fill="#8b949e" font-size="9" transform="rotate(-90,10,68)">Flux (SFU)</text>
+          <text x="240" y="136" fill="#8b949e" font-size="9">Giờ UTC</text>
+        </svg>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     SLIDE 3 — 5 TABS
+══════════════════════════════════════════════════════════ -->
+<div class="slide" id="s3">
+  <div class="tag">Chức năng</div>
+  <h2>5 Tab hiển thị</h2>
+
+  <div class="tab-grid">
+    <div class="tab-card">
+      <div class="icon">🌞</div>
+      <h3>Flux Mặt Trời</h3>
+      <p>Load file SWS <code>.txt</code> thực từ Learmonth (RSTN). Loại tự động phần ban đêm (<code>//////</code>). Hiển thị đường cong flux và thống kê transit.</p>
+    </div>
+    <div class="tab-card">
+      <div class="icon">📐</div>
+      <h3>Mảng &amp; UV Coverage</h3>
+      <p>Bố trí anten trong hệ ENU (mét) và quỹ đạo UV tích lũy trong 12 giờ quan sát. Cập nhật real-time khi thay đổi cấu hình.</p>
+    </div>
+    <div class="tab-card">
+      <div class="icon">∿</div>
+      <h3>Vân giao thoa</h3>
+      <p>Vân giao thoa theo từng baseline. Bảng tóm tắt: b/λ, chu kỳ vân T<sub>fringe</sub>, độ phân giải θ cho từng cặp anten.</p>
+    </div>
+    <div class="tab-card">
+      <div class="icon">🖼</div>
+      <h3>Hình ảnh (PSF + Dirty)</h3>
+      <p>Tính và hiển thị synthesised beam (PSF) và dirty image theo yêu cầu. Biên độ visibility theo chiều dài baseline.</p>
+    </div>
+    <div class="tab-card" style="grid-column:1/-1;flex-direction:row;align-items:center;gap:18px">
+      <div class="icon" style="font-size:28px">ℹ</div>
+      <div>
+        <h3 style="margin-bottom:4px">Hướng dẫn &amp; Tham khảo</h3>
+        <p>Hướng dẫn sử dụng, snippet Python chuyển đổi beam 4NEC2 → JSON, bảng công thức nhanh (λ, u, v, T<sub>fringe</sub>, jinc).</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     SLIDE 4 — 5 PRESET CASES
+══════════════════════════════════════════════════════════ -->
+<div class="slide" id="s4">
+  <div class="tag">Cấu hình mảng</div>
+  <h2>5 Preset — tương ứng 5 case đồ án</h2>
+
+  <div class="card" style="flex:1;overflow:auto">
+    <table class="case-table">
+      <thead>
+        <tr>
+          <th>Case</th>
+          <th>Tên preset</th>
+          <th>Cấu hình</th>
+          <th>b<sub>max</sub></th>
+          <th>Đặc điểm</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="case-tag c1">1</span></td>
+          <td>EW compact</td>
+          <td>4 anten · d=8 m · EW</td>
+          <td><strong>24 m</strong></td>
+          <td style="color:var(--muted)">UV = đường thẳng, 1 chiều</td>
+        </tr>
+        <tr>
+          <td><span class="case-tag c2">2</span></td>
+          <td>N–S linear</td>
+          <td>8 anten · d=15 m · NS</td>
+          <td><strong>105 m</strong></td>
+          <td style="color:var(--muted)">Phân giải cao, 1 chiều NS</td>
+        </tr>
+        <tr>
+          <td><span class="case-tag c3">3</span></td>
+          <td>Chữ T</td>
+          <td>11 anten · d=18 m · T-shape</td>
+          <td><strong>127 m</strong></td>
+          <td style="color:var(--muted)">Phủ UV 2 chiều cơ bản</td>
+        </tr>
+        <tr>
+          <td><span class="case-tag c4">4</span></td>
+          <td>Chữ thập graded</td>
+          <td>17 anten · r=[5,15,35,65] m</td>
+          <td><strong>130 m</strong></td>
+          <td style="color:var(--muted)">Phủ UV 2 chiều đầy đủ</td>
+        </tr>
+        <tr>
+          <td><span class="case-tag c5">5</span></td>
+          <td>Ngẫu nhiên</td>
+          <td>16 anten · ±60 m · seed=3</td>
+          <td><strong>~120 m</strong></td>
+          <td style="color:var(--muted)">Phủ UV không đều, grating lobe</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p style="margin-top:12px;font-size:.82rem">
+    💡 Kéo slider <strong style="color:var(--blue)">xích vĩ δ</strong> để thấy quỹ đạo UV thay đổi từ đường thẳng (δ=0°) sang ellipse (δ≠0°) cho bất kỳ preset nào.
+  </p>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     SLIDE 5 — VẬT LÝ: TẠI SAO UV COVERAGE LÀ ĐƯỜNG THẲNG
+══════════════════════════════════════════════════════════ -->
+<div class="slide" id="s5">
+  <div class="tag">Lý thuyết trực quan</div>
+  <h2>Tại sao UV coverage là đường thẳng?</h2>
+
+  <div class="row" style="gap:28px">
+    <!-- Left: derivation -->
+    <div class="col" style="gap:12px;max-width:400px">
+      <div class="card">
+        <h3 style="margin-bottom:10px">Công thức UV (δ = 0°, baseline EW)</h3>
+        <div class="formula" style="margin-bottom:10px">u(H) = X · sin H / λ</div>
+        <div class="formula" style="background:rgba(63,185,80,.07);border-color:rgba(63,185,80,.3);color:var(--green)">v = Z / λ = <strong>hằng số</strong></div>
+        <p style="margin-top:10px;font-size:.82rem">
+          Vì sin δ = 0 → mọi số hạng có sin δ trong v đều bằng 0.<br>
+          v không phụ thuộc H → cố định trong suốt 12 giờ quan sát.
+        </p>
+      </div>
+      <div class="card">
+        <h3 style="margin-bottom:8px">Hai điều kiện đồng thời</h3>
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <div style="display:flex;align-items:center;gap:10px;font-size:.85rem">
+            <span style="color:var(--green);font-size:18px">✓</span>
+            <div><b style="color:var(--text)">δ = 0°</b> <span style="color:var(--muted)">(xuân phân 20/3)</span><br><span style="color:var(--muted)">→ v = Z/λ = const</span></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;font-size:.85rem">
+            <span style="color:var(--green);font-size:18px">✓</span>
+            <div><b style="color:var(--text)">Baseline thuần EW</b> <span style="color:var(--muted)">(ΔN=0 → Y=0)</span><br><span style="color:var(--muted)">→ u = X sin H / λ</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: UV diagram -->
+    <div class="col">
+      <div class="uv-box">
+        <svg width="100%" height="100%" viewBox="-80 -80 560 560" preserveAspectRatio="xMidYMid meet">
+          <!-- axes -->
+          <line x1="-40" y1="200" x2="440" y2="200" stroke="#30363d" stroke-width="1.5"/>
+          <line x1="200" y1="-40" x2="200" y2="440" stroke="#30363d" stroke-width="1.5"/>
+          <text x="445" y="204" fill="#8b949e" font-size="14">u (λ)</text>
+          <text x="204" y="-28" fill="#8b949e" font-size="14">v (λ)</text>
+          <text x="197" y="218" fill="#8b949e" font-size="11">0</text>
+
+          <!-- Tick labels on u axis -->
+          <text x="75"  y="218" fill="#8b949e" font-size="10">−18</text>
+          <text x="155" y="218" fill="#8b949e" font-size="10">−6</text>
+          <text x="238" y="218" fill="#8b949e" font-size="10">+6</text>
+          <text x="313" y="218" fill="#8b949e" font-size="10">+18</text>
+
+          <!-- v labels -->
+          <text x="-72" y="62"  fill="#8b949e" font-size="10">+45λ</text>
+          <text x="-72" y="122" fill="#8b949e" font-size="10">+30λ</text>
+          <text x="-72" y="172" fill="#8b949e" font-size="10">+15λ</text>
+          <text x="-72" y="232" fill="#8b949e" font-size="10">−15λ</text>
+          <text x="-72" y="282" fill="#8b949e" font-size="10">−30λ</text>
+          <text x="-72" y="338" fill="#8b949e" font-size="10">−45λ</text>
+
+          <!-- b1 = 8m: u ∈ [-6,+6]λ, v = +15λ → y = 200-15*3.1=153.5 -->
+          <!-- scale: 1λ = 3.5px, u=0 at x=200, v=0 at y=200 -->
+          <!-- u range: ±6λ → x: 200-21=179 to 200+21=221 -->
+          <!-- u range: ±12λ → x: 200-42=158 to 200+42=242 -->
+          <!-- u range: ±18λ → x: 200-63=137 to 200+63=263 -->
+          <!-- v=+15λ → y=200-52=148; v=+30 → 200-105=95; v=+45 → 200-157=43 -->
+
+          <!-- 24m baseline (b3): u ∈ [-18,+18]λ, v = ±45λ -->
+          <line x1="137" y1="43"  x2="263" y2="43"  stroke="#bc8cff" stroke-width="3" stroke-linecap="round" opacity=".85"/>
+          <line x1="137" y1="357" x2="263" y2="357" stroke="#bc8cff" stroke-width="3" stroke-linecap="round" opacity=".45"/>
+
+          <!-- 16m baseline (b2): u ∈ [-12,+12]λ, v = ±30λ -->
+          <line x1="158" y1="95"  x2="242" y2="95"  stroke="#3fb950" stroke-width="3" stroke-linecap="round" opacity=".85"/>
+          <line x1="158" y1="305" x2="242" y2="305" stroke="#3fb950" stroke-width="3" stroke-linecap="round" opacity=".45"/>
+
+          <!-- 8m baseline (b1): u ∈ [-6,+6]λ, v = ±15λ -->
+          <line x1="179" y1="148" x2="221" y2="148" stroke="#58a6ff" stroke-width="3" stroke-linecap="round" opacity=".85"/>
+          <line x1="179" y1="252" x2="221" y2="252" stroke="#58a6ff" stroke-width="3" stroke-linecap="round" opacity=".45"/>
+
+          <!-- End markers (transit points at u=0) -->
+          <circle cx="200" cy="148" r="4" fill="#58a6ff"/>
+          <circle cx="200" cy="95"  r="4" fill="#3fb950"/>
+          <circle cx="200" cy="43"  r="4" fill="#bc8cff"/>
+
+          <!-- Legend -->
+          <rect x="270" y="30" width="110" height="80" rx="6" fill="#161b22" stroke="#30363d"/>
+          <line x1="278" y1="50"  x2="298" y2="50"  stroke="#58a6ff" stroke-width="3"/>
+          <text x="302" y="54" fill="#e6edf3" font-size="11">b = 8 m</text>
+          <line x1="278" y1="68"  x2="298" y2="68"  stroke="#3fb950" stroke-width="3"/>
+          <text x="302" y="72" fill="#e6edf3" font-size="11">b = 16 m</text>
+          <line x1="278" y1="86"  x2="298" y2="86"  stroke="#bc8cff" stroke-width="3"/>
+          <text x="302" y="90" fill="#e6edf3" font-size="11">b = 24 m</text>
+
+          <!-- Annotation: v = const -->
+          <line x1="225" y1="148" x2="310" y2="130" stroke="#58a6ff" stroke-width="1" stroke-dasharray="3,3"/>
+          <text x="312" y="128" fill="#58a6ff" font-size="11">v = const</text>
+        </svg>
+      </div>
+      <p style="font-size:.78rem;margin-top:8px;text-align:center">
+        Mỗi baseline cho 1 đoạn thẳng nằm ngang · v cố định · u biến thiên theo sin H
+      </p>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     SLIDE 6 — HƯỚNG DẪN SỬ DỤNG
+══════════════════════════════════════════════════════════ -->
+<div class="slide" id="s6">
+  <div class="tag">Hướng dẫn</div>
+  <h2>Bắt đầu trong 3 bước</h2>
+
+  <div class="how-row">
+    <div class="how-step">
+      <div class="num">1</div>
+      <div class="icon2">🌐</div>
+      <h3>Mở file HTML</h3>
+      <p>Kéo thả <code>radio_sim.html</code> vào trình duyệt<br>(Chrome / Firefox / Edge).<br><br>Không cần server, không cần cài đặt.</p>
+    </div>
+    <div class="how-step">
+      <div class="num">2</div>
+      <div class="icon2">📂</div>
+      <h3>Load dữ liệu SWS</h3>
+      <p>Nhấn <em>"Chọn file .txt"</em> trong sidebar.<br>Chọn file <code>L610xxxx.txt</code> từ Learmonth.<br><br>Nếu không có file → dùng mô hình Gaussian.</p>
+    </div>
+    <div class="how-step">
+      <div class="num">3</div>
+      <div class="icon2">🎛</div>
+      <h3>Chọn preset &amp; khám phá</h3>
+      <p>Chọn 1 trong 5 preset (Case 1–5).<br>Kéo slider δ để thấy UV coverage cong.<br>Nhấn tab <em>Ảnh</em> để render PSF.</p>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span style="font-size:13px;color:var(--muted)">💡 Thủ thuật nhanh:</span>
+      <div class="chips">
+        <div class="chip">Tick "Tự cập nhật" để không cần nhấn nút</div>
+        <div class="chip">Load beam.json từ 4NEC2 để dùng beam thực</div>
+        <div class="chip">Thêm/xoá anten bằng nút +/− trong bảng</div>
+        <div class="chip">Đổi tần số slider → chu kỳ vân thay đổi ngay</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- end deck -->
+
+<!-- Navigation -->
+<div id="nav"></div>
+<div id="progress"></div>
+<div id="slide-num"></div>
+<div class="nav-arrow" id="nav-prev">‹</div>
+<div class="nav-arrow" id="nav-next">›</div>
+
+<script>
+const slides = document.querySelectorAll('.slide');
+const N = slides.length;
+let cur = 0;
+
+const navDots = document.getElementById('nav');
+const progress = document.getElementById('progress');
+const slideNum = document.getElementById('slide-num');
+
+// Build nav dots
+slides.forEach((_,i)=>{
+  const d = document.createElement('div');
+  d.className = 'dot' + (i===0?' active':'');
+  d.onclick = ()=>goTo(i);
+  navDots.appendChild(d);
+});
+
+function goTo(n, dir=1){
+  if(n<0||n>=N) return;
+  slides[cur].classList.remove('active');
+  slides[cur].classList.add('exit');
+  setTimeout(()=>slides[cur].classList.remove('exit'), 400);
+  cur = n;
+  slides[cur].classList.add('active');
+  document.querySelectorAll('.dot').forEach((d,i)=>d.classList.toggle('active',i===cur));
+  progress.style.width = ((cur+1)/N*100)+'%';
+  slideNum.textContent = (cur+1)+' / '+N;
+}
+
+goTo(0);
+
+document.getElementById('nav-prev').onclick = ()=>goTo(cur-1);
+document.getElementById('nav-next').onclick = ()=>goTo(cur+1);
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowRight'||e.key==='Space'||e.key==='PageDown') goTo(cur+1);
+  if(e.key==='ArrowLeft'||e.key==='PageUp') goTo(cur-1);
+  if(e.key==='Home') goTo(0);
+  if(e.key==='End') goTo(N-1);
+});
+
+// Touch/swipe
+let tx=0;
+document.addEventListener('touchstart',e=>tx=e.touches[0].clientX,{passive:true});
+document.addEventListener('touchend',e=>{
+  const dx=e.changedTouches[0].clientX-tx;
+  if(Math.abs(dx)>50) goTo(dx<0?cur+1:cur-1);
+},{passive:true});
+</script>
+</body>
+</html>

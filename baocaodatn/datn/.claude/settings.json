@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:www.sws.bom.gov.au)",
+      "WebFetch(domain:www.ngdc.noaa.gov)",
+      "Bash(bibtex slides *)",
+      "Bash(pdflatex -interaction=nonstopmode -halt-on-error slides.tex)",
+      "Bash(pdftoppm -png -r 100 -f 1 -l 1 slides.pdf /tmp/s1)",
+      "Bash(pdftoppm -png -r 100 -f 2 -l 2 slides.pdf /tmp/s2)",
+      "Bash(pdftoppm -png -r 100 -f 25 -l 25 slides.pdf /tmp/s25)",
+      "Bash(pdftoppm -png -r 100 -f 30 -l 30 slides.pdf /tmp/s30)",
+      "Bash(pdftoppm -png -r 100 -f 41 -l 41 slides.pdf /tmp/s41)",
+      "Bash(pdftoppm -png -r 100 -f 40 -l 40 slides.pdf /tmp/s40)",
+      "Bash(rm -f /tmp/s*.png *)"
+    ],
+    "additionalDirectories": [
+      "\\tmp"
+    ]
+  }
+}

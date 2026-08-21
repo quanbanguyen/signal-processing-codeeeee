@@ -305,6 +305,22 @@ def tee(n_ew, n_ns, spacing, name=None):
     return ArrayConfig(nm, np.array(pts))
 
 
+def triangle_center(side, az0_deg=0.0, name=None):
+    """Mảng kiểu DLITE (Helmboldt+ 2021, Radio Science, DOI 10.1029/2021RS007298):
+    3 anten ở đỉnh tam giác đều cạnh `side`, 1 anten ở tâm. Không có 2 baseline
+    nào song song → 6 vector baseline chỉ tới 6 phương khác nhau, tối đa hoá
+    u-v coverage không trùng lặp (khác cross/tee, nơi baseline đối xứng trùng
+    phương → track u-v chồng lên nhau). az0_deg: phương đỉnh tam giác đầu tiên
+    (0=Bắc, 90=Đông), hai đỉnh còn lại lệch ±120°."""
+    R = side / np.sqrt(3.0)   # bán kính ngoại tiếp tam giác đều cạnh `side`
+    az = np.radians(az0_deg + np.array([0.0, 120.0, 240.0]))
+    E = R * np.sin(az)
+    N = R * np.cos(az)
+    pts = [(0.0, 0.0)] + list(zip(E, N))   # anten 0 = tâm, 1..3 = đỉnh
+    nm = name or f"triangle_center_side{side:g}"
+    return ArrayConfig(nm, np.array(pts))
+
+
 def random_2d(n, extent, seed=0, name=None):
     """n anten rải ngẫu nhiên trong ô vuông ±extent/2 m (u-v phủ kín, ít cách đều)."""
     rng = np.random.default_rng(seed)
@@ -322,6 +338,12 @@ def from_enu(positions_enu, name="custom"):
 def preset_compact():
     """CASE 1 — bám dự án ngoài trời: mảng Đông-Tây 4 anten [0,8,16,24] m."""
     return linear(4, 8.0, az_deg=90.0, name="compact_outdoor_EW")
+
+
+def preset_dlite(side=8.0):
+    """CASE 1.75 — mô phỏng theo bố trí thực tế của DLITE (Helmboldt+ 2021):
+    tam giác đều cạnh `side` + 1 anten tâm, đỉnh đầu quay về hướng Bắc."""
+    return triangle_center(side, az0_deg=0.0, name=f"dlite_triangle_center_{side:g}m")
 
 
 def preset_extended():

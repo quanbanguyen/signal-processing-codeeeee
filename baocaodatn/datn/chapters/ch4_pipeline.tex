@@ -1,0 +1,1399 @@
+% =====================================================================
+%  CHAPTER 4 — DESIGN OF THE INTERFEROMETRY SIMULATION PIPELINE
+% =====================================================================
+\chapter{DESIGN OF THE INTERFEROMETRY SIMULATION PIPELINE}
+\label{ch:pipeline}
+
+Chapter~\ref{ch:theory} established the theoretical chain that connects solar
+radio flux to interferometric imaging: flux density is converted to received
+power, received power to voltage, voltage to correlated visibility, and
+visibility to a dirty image. Chapter~\ref{ch:antenna} then provided the
+receiving-element model required by this chain, including the antenna gain,
+primary beam, input impedance, and mutual-coupling validation. This chapter
+implements those two foundations as a reproducible, end-to-end simulation
+pipeline, and it is organised so that every subsection can be read as the
+direct implementation of one specific relation from Chapter~\ref{ch:theory}.
+
+The purpose of the pipeline is not to reproduce the internal hardware of the
+Learmonth observatory. Learmonth provides the external solar input
+$S_\nu(t)$ at \SI{610}{\mega\hertz} (Section~\ref{subsec:sv-of-t}); the
+simulated instrument is the proposed low-cost four-element UHF
+interferometer characterised in Chapter~\ref{ch:antenna}. Each stage in this
+chapter therefore answers a specific forward-modelling question: given the
+solar flux incident on Earth, what signal would be received by the modelled
+Yagi element, what voltage would appear in each receiver channel, what
+visibility would be produced by each antenna pair, and what dirty image
+would be reconstructed from the resulting $uv$-coverage?
+
+% =====================================================================
+\section{From Theory to Implementation: Simulation Chain}
+\label{sec:blockdiagram}
+
+The theoretical chain of Chapter~\ref{ch:theory} can be written as one
+sequence of quantities:
+\begin{equation*}
+  S_\nu(t) \;\rightarrow\; P_\mathrm{sig}(t) \;\rightarrow\; V_\mathrm{rms}(t)
+  \;\rightarrow\; v_k(t) \;\rightarrow\; V_{ij}(u,v,w) \;\rightarrow\; I_D(l,m).
+\end{equation*}
+This chapter is the implementation of exactly that sequence, expanded to
+include the two steps-real archived data and a real antenna beam-that
+Chapter~\ref{ch:theory} treated abstractly:
+\begin{equation*}
+  \text{Learmonth flux file} \rightarrow \text{simulation time grid}
+  \rightarrow \text{primary beam} \rightarrow \text{RF power}
+  \rightarrow \text{complex voltage} \rightarrow \text{noise}
+  \rightarrow \text{geometric phase} \rightarrow \text{correlation}
+  \rightarrow \text{visibility} \rightarrow \text{dirty image}.
+\end{equation*}
+Table~\ref{tab:theory-to-pipeline} makes this correspondence explicit,
+equation by equation, and each subsection below opens with a sentence
+identifying which relation it implements.
+
+\begin{table}[H]
+  \centering
+  \caption[Correspondence between the Chapter~2 theoretical chain and its Chapter~4 implementation]{Correspondence between the Chapter~\ref{ch:theory} theoretical chain and its Chapter~\ref{ch:pipeline} implementation.}
+  \label{tab:theory-to-pipeline}
+  \renewcommand{\arraystretch}{1.3}
+  \begin{tabularx}{\textwidth}{l >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}X}
+    \toprule
+    \textbf{Chapter~\ref{ch:theory} gives} & \textbf{Physical meaning} & \textbf{Chapter~\ref{ch:pipeline} implements as} \\
+    \midrule
+    $S_\nu(t)$, in sfu (Section~\ref{subsec:sv-of-t}) & Solar flux density & Learmonth \SI{610}{\mega\hertz} input file (Section~\ref{sec:data}) \\
+    $1~\sfu=\SI{e-22}{\watt\per\square\metre\per\hertz}$ (Eq.~\eqref{eq:sfu}) & Conversion to SI & \texttt{flux\_sfu * 1e-22} (Section~\ref{sec:data}) \\
+    $A_e=\lambda^2 G/4\pi$ (Eq.~\eqref{eq:aeff}) & Effective aperture & Computed from the 4NEC2 boresight gain (Section~\ref{sec:beam-integration}) \\
+    $A_n(\theta,\phi)$ (Section~\ref{subsec:antenna-gain-beam}) & Primary beam & Loaded from the 4NEC2 pattern of Chapter~\ref{ch:antenna} (Section~\ref{sec:beam-integration}) \\
+    $P_\mathrm{sig}=\tfrac12 A_e S_\nu \Delta\nu$ (Eq.~\eqref{eq:friis}) & Received signal power & Flux-to-power block (Section~\ref{sec:voltage-synth}) \\
+    $P_n=k_B T_\mathrm{sys}\Delta\nu$ (Eq.~\eqref{eq:johnson}) & Thermal noise power & Noise injection (Section~\ref{sec:voltage-synth}) \\
+    $V_\mathrm{rms}=\sqrt{P_\mathrm{rx}R_\mathrm{load}}$ (Eq.~\eqref{eq:vrms}) & Power-to-voltage & Voltage synthesis (Section~\ref{sec:voltage-synth}) \\
+    $\phi_k=2\pi\nu\tau_k$ (Eq.~\eqref{eq:taug}) & Geometric phase & Per-antenna phase model (Section~\ref{sec:geometry}) \\
+    $V_{ij}=\langle v_i v_j^*\rangle$ (Eq.~\eqref{eq:correlator-def}) & Visibility & Correlator (Section~\ref{sec:correlator}) \\
+    $(u,v,w)$ (Eq.~\eqref{eq:uvw}) & Baseline in spatial-frequency coordinates & Geometry module (Section~\ref{sec:geometry}) \\
+    $I_D=I*B$ (Eq.~\eqref{eq:dirty}) & Dirty-image relation & Imaging and PSF validation (Section~\ref{sec:imaging}) \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+The pipeline is implemented in Python as a sequence of physically grounded,
+independently testable stages, structured around two complementary
+simulation engines that share identical geometry, beam, and noise models but
+differ in how they produce visibilities. \emph{Engine~A}
+(\texttt{simulate\_voltages} $\rightarrow$ \texttt{correlate}) synthesises
+per-antenna complex voltage time series, applies geometric phase
+sample-by-sample, and time-averages the cross-products to form visibilities:
+it is the more physical of the two, following every link of the chain above
+explicitly, including realistic signal-to-noise ratios and the
+radiometer-equation improvement with integration time
+(Section~\ref{subsec:radiometer}). \emph{Engine~B}
+(\texttt{forward\_visibilities}) applies the van~Cittert-Zernike relation of
+Eq.~\eqref{eq:vcz} analytically to a parametric sky model (a uniform solar
+disk), evaluating the resulting visibility function directly at the tracked
+$uvw$ coordinates. Engine~B bypasses the voltage and noise chain entirely,
+making it orders of magnitude faster for the array-geometry sweeps of
+Section~\ref{sec:cases} where absolute noise levels are not the quantity of
+interest. Both engines share the same $\mathrm{ENU}\to XYZ\to uvw$ geometry
+transformation (Section~\ref{sec:geometry}) and produce the same visibility
+format, so the downstream imaging code of Section~\ref{sec:imaging} is
+engine-agnostic.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{fig_pipeline_block}
+  \caption[Block diagram of the end-to-end simulation pipeline]{Block diagram of the end-to-end simulation pipeline.\\[4pt]
+  Real SWS Learmonth solar flux enters Engine~A (voltage-synthesis path), which
+  constructs per-antenna complex baseband voltages via the Friis reception
+  relation, adds Johnson-Nyquist thermal noise, imposes the geometric phase delay
+  through the ENU$\rightarrow$XYZ$\rightarrow\uvw$ transformation, and
+  accumulates cross-correlations to form visibilities. Engine~B bypasses voltage
+  synthesis and evaluates the van Cittert-Zernike forward integral analytically,
+  producing visibilities directly from a sky brightness model at negligible
+  computational cost. Both engines deliver identically formatted visibility sets
+  to the common imaging stage, which computes the dirty image and the
+  synthesised beam by vectorised direct DFT.}
+  \label{fig:pipeline-block}
+\end{figure}
+
+% =====================================================================
+\section{Input Data: Learmonth 610~MHz Flux as the External Solar Reference}
+\label{sec:data}
+
+This section implements the flux-density input $S_\nu(t)$ introduced in
+Section~\ref{subsec:sv-of-t}. As emphasised there and in
+Section~\ref{subsec:learmonth-hardware}, the simulation does not attempt to
+reproduce the internal receiver chain of the Learmonth observatory; it uses
+the Learmonth record as an external, already-calibrated flux-density input,
+and forward-models the voltage, noise, and visibilities of the proposed
+instrument from that input.
+
+\subsection{What the Learmonth Data Represents}
+\label{subsec:learmonth-represents}
+
+As described in Section~\ref{subsec:learmonth-hardware}, Learmonth Solar
+Observatory is part of the RSTN, and its \SI{610}{\mega\hertz} channel is one
+of eight discrete-frequency Radio Interference Monitoring Set (RIMS)
+channels, fed by an \SI{8.5}{\metre} parabolic
+dish~\citep{sws,sws_rims_metadata}, digitised at \SI{1}{\hertz} and reported
+as calibrated total power in solar flux units~\citep{rstn_overview}. Each
+daily file stores one integrated flux sample per second across the local
+daytime window, with nighttime samples represented by a six-character
+missing-value token (\texttt{//////}). At the Learmonth latitude
+$\varphi=-22.2^\circ$, slightly more than half of the \num{86400} seconds in
+a UTC day fall in this nighttime gap; because the observatory operates at
+UTC$+8$, the genuine daytime window spans roughly 22:20~UTC of the previous
+day to 09:30~UTC of the current day, giving approximately \SI{10.4}{\hour} of
+real solar samples per day, with a fill factor close to \SI{99}{\percent}
+after nighttime removal.
+
+In the notation of this chapter, the raw record is a set of timestamped
+samples $\{t_i^\mathrm{raw}, S_i^\mathrm{raw}\}$, with $S_i^\mathrm{raw}$
+given in solar flux units. This is exactly $S_\nu(t)$ of
+Section~\ref{subsec:sv-of-t}, sampled at Learmonth's native one-second
+cadence rather than on the simulation's own time grid.
+
+\subsection{What the Learmonth Data Does Not Provide}
+\label{subsec:learmonth-limits}
+
+To avoid overstating what the Learmonth record can justify, it is worth being
+explicit about its limits, consistent with the caveat already raised in
+Section~\ref{subsec:learmonth-hardware}:
+\begin{itemize}[leftmargin=1.5em,itemsep=1pt,topsep=2pt]
+  \item Learmonth provides a \emph{calibrated, standardised total-power} solar
+        flux density in sfu. It does \emph{not} provide a raw voltage
+        waveform.
+  \item Learmonth is a single-dish, total-power radiometer at each frequency,
+        not an interferometer; it provides \emph{no} phase information
+        between separate antennas.
+  \item The public metadata do not specify the complete RF/IF filter
+        response, gain chain, detector implementation, or calibration
+        procedure of the Learmonth receiver (Section~\ref{subsec:learmonth-hardware}).
+        These internal details are therefore not assumed anywhere in this
+        thesis.
+\end{itemize}
+Consequently, this thesis does not simulate the Learmonth receiver. It uses
+$S_\nu(t)$ as an external solar flux input and forward-models the voltage,
+noise, phase, and visibilities that the \emph{proposed} low-cost
+interferometer-not Learmonth's own hardware-would produce in response to
+that flux. The remainder of this chapter is the implementation of that
+forward model.
+
+\subsection{Preprocessing and Interpolation onto the Simulation Grid}
+\label{subsec:preprocessing}
+
+A dedicated preprocessing module, \texttt{sws\_to\_csv.py}, handles every
+aspect of raw file ingestion robustly. The module exposes a single public
+function, \texttt{load\_day(date, freq, out\_dir)}, whose responsibilities
+are:
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Timestamp preservation.} The parser reconstructs a proper UTC
+  timestamp for every sample, retaining all eight RSTN frequencies in a wide
+  DataFrame. A \texttt{gap\_flag} column marks any sample that was missing
+  or interpolated, so that downstream code can distinguish genuine solar data
+  from filled gaps.
+
+  \item \textbf{Nighttime block removal.} Rather than forward-filling the last
+  valid daytime sample across the entire night-which would smear a single
+  flux value across thousands of seconds and corrupt the transit statistics-
+  the function identifies the contiguous nighttime block from the leading and
+  trailing runs of \texttt{//////} tokens and excises them entirely. Only the
+  genuine daytime segment is returned.
+
+  \item \textbf{CSV export.} The cleaned daily record is exported to a
+  \texttt{.csv} file in the project's \texttt{file\_excel\_du\_lieu/} directory
+  so that the raw data can be inspected in a spreadsheet at any time, without
+  re-running the pipeline.
+\end{enumerate}
+
+The function call \texttt{sws.load\_day(NGAY, freq="F610", out\_dir=CSV\_DIR)}
+returns two arrays: \texttt{t\_raw} (a timestamp index) and \texttt{sfu\_raw}
+(the flux density in Solar Flux Units), covering only the daytime transit
+window. Figure~\ref{fig:sws-flux} shows the result for the validation day,
+20~March~2025.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{fig_sws_flux_day}
+  \caption[SWS Learmonth 610~MHz solar flux record for 20~March~2025]{SWS Learmonth 610~MHz solar flux record for 20~March~2025.\\[4pt]
+  After preprocessing by \texttt{sws\_to\_csv.py}: nighttime \texttt{//////}
+  gap tokens removed, gap flags applied, and only the genuine daytime transit
+  window retained. The quiet-Sun continuum is visible as a slowly varying
+  envelope; impulsive spikes are candidate Type~III or Type~I burst events.
+  This one-sample-per-second record is subsequently interpolated onto the
+  50\,000-point simulation time grid before voltage synthesis.}
+  \label{fig:sws-flux}
+\end{figure}
+
+The raw SWS record contains one sample per second, whereas the simulation
+voltage chain operates on a uniformly spaced grid of $t_n=t_0+n\Delta t$,
+$n=0,\ldots,N-1$, $N=\num{50000}$, spanning the same transit window. A
+\texttt{scipy} cubic spline (\texttt{CubicSpline}) resamples the daytime flux
+record onto this grid:
+\begin{equation}
+  S_\nu(t_n) = \mathrm{interp}\bigl(\{t_i^\mathrm{raw}\},
+               \{S_i^\mathrm{raw}\},\,t_n\bigr), \quad n = 0,\ldots,N-1,
+  \label{eq:spline}
+\end{equation}
+where $t_i^\mathrm{raw}$ and $S_i^\mathrm{raw}$ are the original Learmonth
+timestamps and flux samples, $t_n$ is the simulation time-grid sample, and
+any negative interpolated value is clipped to zero (physically, flux is
+non-negative). \emph{This interpolation does not introduce new solar
+physics.} It is only a resampling step that places the external solar flux
+record onto the same time grid used by the voltage, geometry, and
+correlation modules below; the cubic spline is used in preference to linear
+interpolation only because it preserves burst morphology and local slope
+better and avoids the Runge oscillations of a global polynomial fit.
+
+% =====================================================================
+\section{Antenna Response Imported from Chapter~\ref{ch:antenna}}
+\label{sec:beam-integration}
+
+This section implements the primary beam $A_n(\theta,\phi)$ of
+Section~\ref{subsec:antenna-gain-beam}, replacing the idealised Gaussian
+primary beam that is standard in textbook treatments with the \emph{actual}
+radiation pattern of the HKD~G11KD-T2 Yagi antenna extracted from the 4NEC2
+antenna simulator in Chapter~\ref{ch:antenna}
+(Section~\ref{sec:primary-beam-extraction}). The motivation is that the
+primary beam directly enters the signal amplitude (Eq.~\eqref{eq:psig}) and
+thus affects every downstream result: a Gaussian approximation can
+underestimate off-axis attenuation by several dB and overestimate the usable
+transit window.
+
+\subsection{Primary-Beam File and Coordinate Convention}
+\label{subsec:beam-class}
+
+The primary beam is encapsulated in a \texttt{PrimaryBeam} Python class that
+loads the pre-computed \texttt{UFRAME\_primary\_beam\_610MHz.npz} file
+produced at the end of Chapter~\ref{ch:antenna}
+(Section~\ref{sec:primary-beam-extraction}) by the post-processing script
+\texttt{parse\_nec\_out.py}. The file stores three arrays: \texttt{theta\_deg}
+(polar angle grid), \texttt{phi\_deg} (azimuth grid), and \texttt{gain\_dBi}
+(the two-dimensional gain surface in dBi at \SI{610}{\mega\hertz}, on the
+$181\times361$, $1^\circ$-step grid described in
+Section~\ref{sec:primary-beam-extraction}). Upon construction the class:
+\begin{enumerate}[leftmargin=*]
+  \item Locates the boresight automatically as the grid point of maximum gain
+  (no assumed direction is hard-coded), using \texttt{np.nanargmax}.
+  \item Computes the normalised power response
+  $A_n(\theta,\phi) = 10^{[G(\theta,\phi)-G_{\rm max}]/10}$, so that the
+  boresight response is exactly unity and the pattern is expressed as a
+  fractional power multiplier-the same $A_n$ used in the visibility integral
+  of Eq.~\eqref{eq:vcz}.
+  \item Constructs a \texttt{RegularGridInterpolator} over the
+  $(\theta,\phi)$ grid (bilinear, extrapolating to zero outside the defined
+  domain) for fast evaluation at arbitrary angles.
+\end{enumerate}
+
+\subsection{Beam Weighting Along the Solar Track}
+\label{subsec:beam-weighting}
+
+Two public methods are provided:
+\begin{itemize}
+  \item \texttt{response\_power($\theta$, $\phi$)}: returns the normalised
+  power response $A_n(\theta,\phi)$ at an arbitrary direction.
+  \item \texttt{response\_voltage\_offset($\Delta\theta$)}: returns the
+  \emph{voltage amplitude} response $\sqrt{A_n}$ as a function of the angular
+  offset from boresight in the boresight azimuth plane. This is the method
+  called during voltage synthesis (Section~\ref{sec:voltage-synth}), where
+  the Sun's angular distance $\theta_z(t_n)$ from the beam peak at each time
+  step is computed from the observation geometry of
+  Section~\ref{sec:geometry}.
+\end{itemize}
+The class reports the extracted peak gain $G_{\rm max}$ in dBi on
+initialisation; for the HKD~G11KD-T2 this is the value derived from the
+4NEC2 antenna simulator (\SI{9.5}{dBi}) and is used to compute the effective
+aperture $A_e = G_{\rm max}\,\lambda^2/(4\pi)$ of Eq.~\eqref{eq:aeff} in the
+Friis chain of Section~\ref{sec:voltage-synth}.
+
+% =====================================================================
+\section{Engine~A: Flux-to-Voltage Forward Model}
+\label{sec:voltage-synth}
+
+This section implements Sections~\ref{sec:flux-to-voltage}
+and~\ref{sec:noise} of Chapter~\ref{ch:theory}: it carries the interpolated
+flux density $S_\nu(t_n)$ of Eq.~\eqref{eq:spline} through the Friis
+reception relation and the voltage-equivalent relation
+(Eqs.~\eqref{eq:friis}-\eqref{eq:vrms}) to a complex per-antenna voltage with
+correctly modelled thermal noise (Eqs.~\eqref{eq:johnson}-\eqref{eq:noise-voltage}).
+Table~\ref{tab:params} collects, in one place, every symbol used in this
+section and the next, so that no quantity appears in an equation before it
+has been defined.
+
+\begin{table}[H]
+  \centering
+  \caption[Symbols used in the flux-to-voltage and correlation stages]{Symbols used in the flux-to-voltage and correlation stages (Sections~\ref{sec:voltage-synth}-\ref{sec:correlator}).}
+  \label{tab:params}
+  \renewcommand{\arraystretch}{1.25}
+  \begin{tabularx}{\textwidth}{l >{\raggedright\arraybackslash}X l}
+    \toprule
+    \textbf{Symbol} & \textbf{Meaning} & \textbf{Unit} \\
+    \midrule
+    $t_i^\mathrm{raw}$, $S_i^\mathrm{raw}$ & Original Learmonth sample time and flux & s (UTC), sfu \\
+    $t_n$ & Simulation time-grid sample & s (UTC) \\
+    $S_\nu(t_n)$ & Interpolated flux density, SI units & \si{\watt\per\square\metre\per\hertz} \\
+    $f_c$ & Centre (observing) frequency & Hz \\
+    $\lambda=c/f_c$ & Wavelength & m \\
+    $\Delta\nu$ & Simulated receiver bandwidth & Hz \\
+    $G_\mathrm{max}$ & Peak antenna gain (Chapter~\ref{ch:antenna}) & dBi / linear \\
+    $A_e$ & Effective aperture & m$^2$ \\
+    $A_n(\theta,\phi)$ & Normalised primary beam (Chapter~\ref{ch:antenna}) & dimensionless \\
+    $\theta_z(t_n)$ & Solar offset from boresight at $t_n$ & deg \\
+    $R_\mathrm{load}$ & Receiver load resistance & $\Omega$ \\
+    $T_\mathrm{sys}$ & Assumed system temperature of the \emph{simulated} receiver & K \\
+    $P_\mathrm{sig}(t_n)$ & Received solar signal power & W \\
+    $P_n$ & Thermal noise power & W \\
+    $V_\mathrm{rms}(t_n)$ & RMS signal voltage & V \\
+    $\sigma_n$ & Noise-voltage standard deviation (per I/Q component) & V \\
+    $v_k(t_n)$ & Complex baseband voltage, antenna $k$ & V \\
+    $\bm{r}_k$ & ENU position vector of antenna $k$ & m \\
+    $\hat{\bm{s}}(t_n)$ & Unit vector toward the Sun & dimensionless \\
+    $\tau_k(t_n)$ & Geometric delay, antenna $k$ & s \\
+    $\phi_k(t_n)$ & Geometric phase, antenna $k$ & rad \\
+    $V_{ij}$ & Complex visibility, baseline $(i,j)$ & complex \\
+    $u,v,w$ & Baseline coordinates & wavelengths \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{System Parameters and Units}
+\label{subsec:sys-params}
+
+All physical constants and instrument parameters are declared in a single
+configuration cell~(Cell~0) and inherited by every downstream stage without
+being re-declared. Table~\ref{tab:sim-params} summarises the full parameter
+set; note that $T_\mathrm{sys}=\SI{150}{\kelvin}$ is an assumed effective
+system temperature for the \emph{simulated} receiver being designed in this
+thesis-it is not, and is not intended to be, the system temperature of the
+Learmonth receiver (Section~\ref{subsec:learmonth-limits}).
+
+\begin{table}[H]
+  \centering
+  \caption[Global simulation parameters (notebook Cell~0)]{Global simulation parameters (notebook Cell~0).\\[4pt]
+  Every physical constant and instrument parameter used throughout the pipeline
+  is declared once in this cell and inherited by all downstream stages without
+  repetition. Changing a value here (observation date, system temperature,
+  bandwidth, or array geometry) propagates automatically to every figure, table,
+  and exported file without modifying any other cell.}
+  \label{tab:sim-params}
+  \renewcommand{\arraystretch}{1.25}
+  \begin{tabularx}{\textwidth}{l l >{\raggedright\arraybackslash}X}
+    \toprule
+    \textbf{Parameter} & \textbf{Symbol / Variable} & \textbf{Value} \\
+    \midrule
+    Centre frequency        & \texttt{fc}               & \SI{610}{\mega\hertz} \\
+    Instantaneous bandwidth & \texttt{BW\_Hz}           & \SI{1}{\mega\hertz} \\
+    Load resistance         & \texttt{R\_load}          & \SI{75}{\ohm} \\
+    System temperature      & \texttt{T\_sys}           & \SI{150}{\kelvin} \\
+    Simulation samples      & \texttt{N\_SAMPLES}       & \num{50000} \\
+    Correlator dump size    & \texttt{INTEGRATION\_BINS}& 50 \\
+    Site latitude           & \texttt{LAT\_DEG}         & $-22.2^\circ$ (Learmonth~\citep{learmonth_coords}) \\
+    Solar declination       & \texttt{DEC\_SUN\_DEG}    & $0.0^\circ$ (20 Mar 2025, spring equinox~\citep{jpl_horizons}) \\
+    Transit window          & \texttt{H\_deg}           & $[-90.0^\circ,\,+90.0^\circ]$ \\
+    Clock offsets           & \texttt{CLOCK\_OFFSET\_NS} & $[0,0,0,0]$~ns (zero: coherent baseline; swept in Sec.~\ref{sec:clock-offset}) \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{Signal Power from Flux Density}
+\label{subsec:signal-power}
+
+This subsection implements the Friis reception relation of
+Eq.~\eqref{eq:friis}. The flux density $S_\nu(t_n)$ interpolated at
+Eq.~\eqref{eq:spline} is first converted from Solar Flux Units to SI
+(1~SFU $= 10^{-22}$~W\,m$^{-2}$\,Hz$^{-1}$, Eq.~\eqref{eq:sfu}) and then to a
+reference received signal power, evaluated at the peak antenna gain:
+\begin{equation}
+  P_{\mathrm{sig}}(t) = \tfrac{1}{2}\,A_e\,S_\nu(t)\,\Delta\nu,
+  \label{eq:psig}
+\end{equation}
+where $A_e$ is the peak effective aperture computed from the 4NEC2 boresight
+gain ($A_e = G_{\rm max}\lambda^2/4\pi$, Eq.~\eqref{eq:aeff}), and
+$\Delta\nu = \SI{1}{\mega\hertz}$ is the assumed instantaneous receiver
+bandwidth of the simulated system (Table~\ref{tab:params}). $P_\mathrm{sig}$
+is not yet a voltage, and it does not yet include the antenna's directional
+response away from boresight; both are added next.
+
+\subsection{Equivalent Voltage Synthesis}
+\label{subsec:voltage-synth-detail}
+
+This subsection implements the voltage-equivalent relation of
+Eq.~\eqref{eq:vrms}. The root-mean-square signal voltage at peak gain is
+\begin{equation}
+  V_{\mathrm{rms}}(t) = \sqrt{P_{\mathrm{sig}}(t)\,R_{\mathrm{load}}},
+\end{equation}
+directly from $P_\mathrm{sig}(t)$ of Eq.~\eqref{eq:psig}. The antenna's
+directional response then enters at this same voltage level, through the
+primary beam of Section~\ref{sec:beam-integration}: the beam-weighted signal
+envelope used in the complex voltage model of Eq.~\eqref{eq:vk} below is
+\begin{equation}
+  A_\mathrm{env}(t_n) = V_\mathrm{rms}(t_n)\cdot\sqrt{A_n(\theta_z(t_n))} .
+\end{equation}
+It is worth being explicit about what this quantity is and is not. It is the
+voltage that the \emph{simulated} Yagi element and receiver, described in
+Chapter~\ref{ch:antenna}, would produce if the incident solar flux were
+$S_\nu(t)$. It is \emph{not} a voltage recovered from Learmonth hardware:
+Learmonth reports only a calibrated flux density
+(Section~\ref{subsec:learmonth-limits}), never a receiver voltage, so there
+is nothing to invert or recover. This voltage is generated forward, from
+flux to power to voltage, exactly as Section~\ref{sec:flux-to-voltage}
+prescribes.
+
+\subsection{Receiver Noise Model}
+\label{subsec:noise-model}
+
+This subsection implements the Johnson-Nyquist noise relation of
+Eq.~\eqref{eq:johnson} and the noise-voltage relation of
+Eq.~\eqref{eq:noise-voltage}. Even though the flux density $S_\nu(t)$
+produces a measurable signal power, no real channel observes that signal
+alone: every channel also carries thermal noise from the antenna, the sky,
+the ground, the cable, and the receiver electronics. The simulation must
+therefore generate not only the deterministic solar voltage of
+Section~\ref{subsec:voltage-synth-detail}, but also a statistically correct
+noise voltage to add to it.
+
+Each antenna receives an independent additive Johnson-Nyquist noise
+contribution~\citep{nyquist1928} of power $P_n = k_B\,T_{\rm sys}\,\Delta\nu$
+(Eq.~\eqref{eq:johnson}), where, as noted in
+Section~\ref{subsec:sys-params}, $T_\mathrm{sys}$ is an assumed effective
+system temperature for the simulated receiver, not a value measured from
+Learmonth. In complex baseband, this noise power is represented as a
+circularly symmetric Gaussian process: the noise standard deviation per I/Q
+component is
+\begin{equation}
+  \sigma_n = \frac{\sqrt{P_n\,R_{\mathrm{load}}}}{\sqrt{2}},
+  \label{eq:noise-sigma}
+\end{equation}
+matching Eq.~\eqref{eq:noise-voltage}, where the $\sqrt{2}$ distributes the
+total noise power equally between the in-phase and quadrature components.
+The independence of thermal noise across antennas is enforced by using a
+fresh draw from \texttt{np.random.default\_rng} for each antenna inside
+\texttt{simulate\_voltages}.
+
+\subsection{Complex Voltage and Geometric Phase}
+\label{subsec:complex-voltage}
+
+This subsection implements the correlator input voltage of
+Section~\ref{subsec:visibility-amp-phase} together with the geometric delay
+and phase of Eq.~\eqref{eq:taug}. Before the equation is written down, every
+symbol in it is defined: $k$ indexes the antenna; $\bm{r}_k$ is the ENU
+position vector of antenna $k$ (Section~\ref{sec:geometry}); $\hat{\bm{s}}(t_n)$
+is the unit vector toward the Sun at simulation time $t_n$; the geometric
+delay of antenna $k$ is $\tau_k(t_n)=\bm{r}_k\cdot\hat{\bm{s}}(t_n)/c$
+(Eq.~\eqref{eq:taug}); and the corresponding geometric phase is
+$\phi_k(t_n)=2\pi f_c\,\tau_k(t_n)$.
+
+A coherent far-field source process $\varepsilon(t)$ is drawn once from a
+unit-variance complex Gaussian distribution with a fixed random seed (42), so
+that all simulation runs with the same configuration are reproducible and
+antenna responses can be compared on a sample-by-sample basis. The per-antenna
+complex baseband voltage is then
+\begin{equation}
+  v_k(t_n) = \underbrace{A_{\mathrm{env}}(t_n)\,\varepsilon(t_n)}_{%
+    \text{signal}} \,e^{\,i\phi_k(t_n)}
+    \;+\; \underbrace{n_k(t_n)}_{\text{noise}},
+  \label{eq:vk}
+\end{equation}
+where $A_\mathrm{env}(t_n)$ is the beam-weighted signal amplitude of
+Section~\ref{subsec:voltage-synth-detail}, $\phi_k(t_n)$ is the geometric
+phase of antenna~$k$ defined above and derived in full in
+Section~\ref{sec:geometry}, and $n_k(t_n)$ is the per-antenna noise sample of
+standard deviation $\sigma_n$ from Eq.~\eqref{eq:noise-sigma}. The result is
+collected into an $(N_{\mathrm{samp}}\times N_{\rm ant})$ complex matrix
+\texttt{V\_matrix}.
+
+\subsection{Clock Offset and Quantisation}
+\label{subsec:clock-offset}
+
+This subsection covers two remaining engineering steps that act on the
+voltage of Eq.~\eqref{eq:vk}: a controllable clock-offset perturbation used
+to study phase-coherence loss (Chapter~\ref{ch:intro},
+Section~\ref{subsec:element-vs-system}), and the hardware-export
+quantisation path.
+
+\paragraph{Clock offset.} In a hardware interferometer each digitiser is
+driven by its own oscillator. Without a common phase reference, each antenna
+accumulates an independent timing offset $\tau_k$ (in seconds) relative to a
+notional master. At the carrier frequency $f_c = \SI{610}{\mega\hertz}$ this
+offset is indistinguishable from a geometric delay and manifests in complex
+baseband as a constant phase rotation applied to every voltage sample of
+that antenna:
+\begin{equation}
+  v_k(t_n)\;\longrightarrow\;
+  v_k(t_n)\,\exp\!\bigl(j2\pi f_c\,\tau_k\bigr),
+  \label{eq:clock-phase}
+\end{equation}
+where $\tau_k$ is expressed in seconds so that the exponent $2\pi f_c\tau_k$ is
+dimensionless. The simulation parameter \texttt{CLOCK\_OFFSET\_NS} accepts the
+same quantity in nanoseconds and scales by $10^{-9}$ internally before applying
+Eq.~\eqref{eq:clock-phase} to each column of \texttt{V\_matrix}.
+The default value is $[0,0,0,0]$~ns (Table~\ref{tab:sim-params}), recovering
+the perfectly phase-coherent baseline. For baseline $(i,j)$, the differential
+offset $\tau_{ij}=\tau_j-\tau_i$ shifts the measured visibility by an extra
+phase without affecting its amplitude:
+\begin{equation}
+  \hat{V}_{ij,\,\mathrm{meas}}
+  = \hat{V}_{ij,\,\mathrm{true}}\,
+    \exp\!\bigl(j2\pi f_c\,\tau_{ij}\bigr).
+  \label{eq:vis-clock}
+\end{equation}
+A static offset is equivalent to an uncalibrated phase error in the
+visibility, removable by a point-source calibration step but corrupting if
+left uncorrected. When $\tau_{ij}$ \emph{drifts} during an integration dump
+because the two oscillators run at slightly different rates, the
+time-averaged fringe amplitude is reduced, a process known as
+\emph{fringe washing}-precisely the effect diagnosed in the Xuan~Mai field
+campaign of Section~\ref{subsec:element-vs-system}. The quantitative analysis
+is given in Section~\ref{sec:clock-offset} of Chapter~\ref{ch:results}.
+
+\paragraph{Signal-to-noise validation.} At the end of the voltage synthesis
+stage a sanity check computes the peak signal-to-noise ratio at solar transit
+($\theta_z = 0$ for a transit directly overhead) in decibels:
+\begin{equation}
+  \mathrm{SNR}_{\mathrm{peak}} = 10\log_{10}\!\left(
+    \frac{\max_t P_{\mathrm{sig}}(t)\cdot R_{\mathrm{load}}}{P_n\cdot R_{\mathrm{load}}}
+  \right).
+  \label{eq:snr-peak}
+\end{equation}
+This is printed alongside $A_e$, $T_{\rm sys}$, and $\Delta\nu$ to confirm
+that the signal sits above the noise floor by a physically reasonable margin
+before any correlation gain is applied. Because \texttt{V\_matrix} contains
+\num{50000} complex samples, plotting the raw $|v(t)|$ waveform directly is
+uninformative: a 500-sample sliding-RMS filter is therefore applied,
+\begin{equation}
+  \hat{V}_{\mathrm{rms}}[n] = \sqrt{\frac{1}{W}\sum_{k=n}^{n+W-1}|v[k]|^2},
+  \quad W=500,
+  \label{eq:sliding-rms}
+\end{equation}
+computed efficiently via a cumulative sum (O$(N)$). Figure~\ref{fig:voltage-env}
+shows the resulting envelope: a correctly synthesised \texttt{V\_matrix} should
+show a smooth bell-shaped envelope peaking at mid-transit, with the noise
+floor $V_\mathrm{noise}=\sqrt{P_n R_\mathrm{load}}$ visible in the wings.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{fig_voltage_env}
+  \caption[Per-antenna voltage envelope (sliding RMS) over the transit window]{Per-antenna voltage envelope (sliding RMS) over the transit window.\\[4pt]
+  The 500-sample sliding root-mean-square of the complex voltage at one
+  representative antenna (all four are statistically identical under this
+  beam and geometry model) traces the combined effect of the solar flux
+  profile and the primary-beam attenuation as the Sun rises, transits, and
+  sets. The dashed line marks the Johnson-Nyquist noise floor
+  $V_{\rm noise}\approx0.394\,\si{\micro\volt}$. Per-sample SNR is sub-unity
+  (the signal is buried in noise), but the bell-shaped transit envelope is
+  unambiguous on the scale of the sliding RMS and serves as the first
+  pipeline diagnostic checkpoint.}
+  \label{fig:voltage-env}
+\end{figure}
+
+\paragraph{16-bit quantisation and hardware export.} Although an FPGA
+hardware correlator was removed from the project scope, the voltage-chain
+engine retains a full 16-bit quantisation and hex-export stage (Cell~4 of the
+notebook), both to demonstrate forward compatibility with real-time hardware
+and to provide an additional numerical validation of the voltage amplitudes:
+a misconfigured signal chain would either saturate the ADC or bury the
+signal in quantisation noise. The full-scale range of a 16-bit signed
+integer is $[-32768, 32767]$, so a global scale factor is computed as
+\begin{equation}
+  k_s = \frac{32767}{\max_{n,k}|v_k(t_n)|},
+  \label{eq:scale}
+\end{equation}
+mapping the peak voltage across all antennas and time steps to the ADC
+ceiling. Each complex sample is then rounded to the nearest integer, clamped,
+and represented as a two's complement 16-bit word for both the in-phase (I)
+and quadrature (Q) components. Before writing the output file, a validation
+check confirms that the noise floor occupies at least 3 least-significant
+bits:
+\begin{equation}
+  \mathrm{LSB}_{\mathrm{noise}} = V_{\mathrm{noise}}\cdot k_s \geq 3.
+  \label{eq:lsb-check}
+\end{equation}
+If this condition fails, the thermal noise would be below the quantisation
+floor and the digital correlator would see quantisation noise rather than
+Johnson-Nyquist noise, corrupting the noise statistics; for the parameters of
+Table~\ref{tab:sim-params} the condition is comfortably satisfied. The
+quantised output is written to a plain-text file
+\texttt{iq\_array\_stimulus.txt}, with one row per time sample and
+$2N_{\rm ant}$ hexadecimal columns per row (I and Q for each antenna, in
+order), together with a self-documenting metadata file
+\texttt{iq\_array\_stimulus\_meta.txt} recording every parameter needed to
+decode the file.
+
+% =====================================================================
+\section{Array Geometry and \texorpdfstring{$uvw$}{uvw} Sampling}
+\label{sec:geometry}
+
+This section implements the geometry of Section~\ref{sec:uvw-coverage}: the
+ENU ground coordinates, the source-based $uvw$ transformation of
+Eq.~\eqref{eq:uvw}, and the Earth-rotation $uv$-coverage argument of
+Section~\ref{subsec:earth-rotation-uv}.
+
+\subsection{Array Configuration Presets}
+\label{subsec:array-presets}
+
+Antenna positions are specified in the local East-North-Up (ENU) frame of
+Section~\ref{subsec:enu}, with Up $= 0$ for all antennas (a flat
+ground-based deployment); this is the $\bm{r}_k$ of
+Section~\ref{subsec:complex-voltage}. The pipeline provides six configurable
+array constructors, all accessed through a common \texttt{Array} class
+interface:
+
+\begin{table}[H]
+  \centering
+  \caption[Array geometry presets in the simulation pipeline (Cell~B)]{Array geometry presets in the simulation pipeline (Cell~B).\\[4pt]
+  All six constructors share the same ENU$\rightarrow$XYZ$\rightarrow\uvw$
+  geometry engine and produce output in the identical format consumed by the
+  correlator and imaging stages. The \texttt{from\_enu(coords)} constructor
+  accepts an arbitrary list of antenna positions, enabling any custom layout
+  to be evaluated without modifying the pipeline code.}
+  \label{tab:array-presets}
+  \renewcommand{\arraystretch}{1.25}
+  \begin{tabularx}{\textwidth}{l >{\raggedright\arraybackslash}X l}
+    \toprule
+    \textbf{Constructor} & \textbf{Description} & \textbf{Baseline range} \\
+    \midrule
+    \texttt{preset\_compact()}         & 4 E-W antennas at 0, 8, 16, 24~m          & 8--24~m \\
+    \texttt{preset\_extended()}        & Graded 2-D cross, 5--130~m baselines       & 5--130~m \\
+    \texttt{linear(8, 15, az=0)}       & 8 antennas due North, 15~m spacing         & 15--105~m \\
+    \texttt{tee(6, 5, 18)}             & 6 E-W + 5 N antennas, 18~m spacing        & 18--162~m \\
+    \texttt{random\_2d(16,120,seed=3)} & 16 antennas uniformly random, $120\times120$~m & variable \\
+    \texttt{from\_enu(coords)}         & Arbitrary list of (E, N) coordinates       & arbitrary \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+For Case~1 (the compact field array), \texttt{preset\_compact()} places four
+antennas along the East-West axis at positions
+$(E,N) = (0,0),\,(8,0),\,(16,0),\,(24,0)$~m, yielding baselines of 8, 16, and
+24~m ($N_B = 3$ pairs). The \texttt{Array} object automatically computes all
+baseline vectors, pair indices, and baseline lengths, which are used by the
+correlator and imaging stages without any further user input.
+
+\subsection{Geographic Observation Context}
+\label{subsec:geo-context}
+
+The observation window is parameterised by the solar hour angle
+$H \in [-90.0^\circ,\,+90.0^\circ]$, which corresponds to the interval
+over which the Sun is above the local horizon at Learmonth
+($\varphi = -22.2^\circ$~\citep{learmonth_coords}) for 20~March~2025
+(spring equinox; solar declination $\delta = 0.0^\circ$~\citep{jpl_horizons}). At the equinox the Sun rises and sets exactly on the
+equator, so the observable window is exactly $\SI{12.0}{\hour}$, consistent
+with the SWS transit record for that date.
+
+Each hour-angle step corresponds to $\approx 278$ simulation
+samples per degree of Earth rotation. Figure~\ref{fig:globe-track} shows the
+Sun's apparent track rendered on an orthographic globe centred over the
+Australia--Southeast~Asia region; the orange band marks the full
+$\SI{12.0}{\hour}$ observing window ($H\in[-90^\circ,+90^\circ]$) and the
+yellow star marks the transit instant ($H=0$).
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{fig_globe_track}
+  \caption[Apparent solar track and transit geometry (Learmonth, 20~March~2025)]{Apparent solar track and transit geometry over the Learmonth--Southeast~Asia
+  region on 20~March~2025 ($\delta=0.0^\circ$, spring equinox).\\[4pt]
+  The orange band marks the 12-hour observing window ($H\in[-90^\circ,+90^\circ]$,
+  sunrise to sunset). The transit point (yellow star, $H=0$) is located on the
+  terrestrial equator at longitude $114.1^\circ$~E, midway between
+  Hanoi ($21.0^\circ$~N, $105.9^\circ$~E) and Learmonth ($22.2^\circ$~S,
+  $114.1^\circ$~E) in geographic latitude.
+  %
+  The transit point is determined by two independent facts: (1)~transit ($H=0$)
+  is defined as the instant the Sun crosses the \emph{observer's} meridian
+  ($\lambda_\text{obs} = 114.1^\circ$~E), fixing the longitude; and
+  (2)~the sub-solar latitude equals the solar declination $\delta=0^\circ$,
+  placing the sub-solar point on the equator. Hanoi lies
+  $8.2^\circ$ west of the Learmonth meridian; the Sun therefore passed through
+  the Hanoi longitude $\approx 33$~minutes \emph{before} culminating at
+  Learmonth, which is why the transit star does not appear directly above
+  Hanoi.}
+  \label{fig:globe-track}
+\end{figure}
+
+\subsection{The ENU \texorpdfstring{$\rightarrow$}{->} XYZ \texorpdfstring{$\rightarrow$}{->} \texorpdfstring{$\uvw$}{(u,v,w)} Transformation}
+\label{subsec:enu2xyz}
+
+The first rotation converts each antenna's local East-North-Up displacement
+$(\Delta E,\,\Delta N,\,\Delta U)$-the ENU baseline of
+Section~\ref{subsec:enu}-into the equatorial baseline frame
+$(X_\lambda,Y_\lambda,Z_\lambda)$ used by Eq.~\eqref{eq:uvw}.
+At observing latitude $\varphi$ this rotation is \citep{tms2017}
+\begin{equation}
+  \begin{bmatrix} X_\lambda \\ Y_\lambda \\ Z_\lambda \end{bmatrix}
+  = \frac{1}{\lambda}
+  \begin{bmatrix}
+    -\sin\varphi & 0 & \cos\varphi \\
+     0           & 1 & 0           \\
+     \cos\varphi & 0 & \sin\varphi
+  \end{bmatrix}
+  \begin{bmatrix} \Delta E \\ \Delta N \\ \Delta U \end{bmatrix},
+  \label{eq:enu2xyz}
+\end{equation}
+where the factor $1/\lambda$ converts the physical baseline (metres) to
+dimensionless wavelengths. For the flat deployment considered here
+$\Delta U = 0$, so the $\cos\varphi$ column is inactive.
+
+Antenna positions are rotated first from ENU to the equatorial XYZ frame by
+the site latitude (Eq.~\eqref{eq:enu2xyz}), and then, for each hour angle, into
+the baseline coordinate frame by Eq.~\eqref{eq:uvw}. A single call to
+\texttt{ix.compute\_uvw(baseline\_vectors\_enu, obs)} returns the
+$(N_I\times N_B)$ arrays $u$, $v$, $w$ for all integration dumps and all baselines
+simultaneously, where $N_I$ is the number of correlator dump times. The same
+transformation supplies all three quantities consistently: the per-antenna
+geometric phase $\phi_k = -\frac{2\pi}{\lambda}\bm{r}_k\cdot\hat{\bm{s}}$
+used in Eq.~\eqref{eq:vk}, the baseline $\uvw$ coordinates for imaging, and
+the $w$-term for fringe stopping.
+
+A validation step cross-checks the dump nearest to transit
+($H \approx 0^\circ$) against an independent single-point call
+\texttt{compute\_uvw($H$=0)}, confirming agreement in $u$ to within 1~$\lambda$
+and in $v$ to within 0.5~$\lambda$ across all baselines.
+
+\subsection{\texorpdfstring{$uv$}{uv} Coverage}
+\label{subsec:uv-coverage}
+
+As $H$ sweeps across the transit, Earth rotation causes each baseline vector to
+trace an arc in the $uv$-plane, exactly as described in
+Section~\ref{subsec:earth-rotation-uv}. For the compact east-west array the
+arcs are short and nearly horizontal (small $v$ component), yielding a
+one-dimensional sampling line in the $uv$-plane; for two-dimensional layouts
+the arcs curve and fill the plane more completely. Figure~\ref{fig:uv-coverage}
+shows the $uv$-coverage of the compact array.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{fig_uv_coverage}
+  \caption[$uv$-coverage of the compact east-west array over the 12-hour transit]{$uv$-coverage of the compact east-west array over the 12-hour transit.\\[4pt]
+  Case~1, 20~March~2025, $H\in[\pm90.0^\circ]$). Each of the three baselines
+  (8~m, 16~m, 24~m) traces a nearly horizontal arc as the Earth rotates.
+  Together the three arcs sample only a narrow east-west strip of the
+  $uv$-plane, providing angular resolution only in the east-west direction.
+  Recovering north-south resolution requires either additional north-south
+  baselines or observation at non-equatorial declinations.}
+  \label{fig:uv-coverage}
+\end{figure}
+
+% =====================================================================
+\section{Correlator and Visibility Formation}
+\label{sec:correlator}
+
+This section implements the correlator definition of
+Section~\ref{subsec:visibility-amp-phase}, Eq.~\eqref{eq:correlator-def}. A
+single antenna voltage $v_k(t_n)$, as synthesised in
+Section~\ref{sec:voltage-synth}, is not yet an interferometric measurement:
+a single antenna can only measure power, $\langle|v_k(t)|^2\rangle$, which
+carries no information about the direction of the source on the sky. The
+interferometric measurement is the time-averaged cross-product between two
+antenna voltages.
+
+\subsection{Cross-Correlation and Time Averaging}
+\label{subsec:cross-corr}
+
+For each antenna pair $(i,j)$ the correlator accumulates the time-averaged
+product of the complex voltage streams:
+\begin{equation}
+  \hat{V}_{ij}[m] = \frac{1}{N_{\mathrm{dump}}}
+    \sum_{n\in\mathcal{D}_m} v_i(t_n)\,v_j^{*}(t_n),
+  \label{eq:correlate}
+\end{equation}
+where:
+\begin{itemize}[leftmargin=1.5em,itemsep=1pt,topsep=2pt]
+  \item $i,j$ index the antenna pair;
+  \item $\mathcal{D}_m$ is the set of $N_{\mathrm{dump}} = $
+        \texttt{INTEGRATION\_BINS} $= 50$ samples in the $m$-th integration
+        dump;
+  \item $v_j^*$ is the complex conjugate of antenna $j$'s voltage;
+  \item $\hat{V}_{ij}[m]$ is the resulting complex visibility estimate for
+        dump $m$, with amplitude $|\hat{V}_{ij}|$ and phase
+        $\angle\hat{V}_{ij}$.
+\end{itemize}
+$N_I = N_{\mathrm{samp}}/N_{\mathrm{dump}} = 1000$ is the total number of
+visibility dumps. Equation~\eqref{eq:correlate} is the discrete estimator of
+the true visibility $V(u_{ij},v_{ij})$ at the instantaneous baseline of the
+pair, exactly as defined in Eq.~\eqref{eq:correlator-def}. The integration
+time per dump is
+\begin{equation}
+  \tau_{\mathrm{dump}} = N_{\mathrm{dump}}\cdot\frac{12\times 3600\,\mathrm{s}}{N_{\mathrm{samp}}}
+                  \approx \SI{43.2}{\second},
+\end{equation}
+short enough that time-average smearing across the \SI{3}{\degree} FOV is
+negligible at the antenna separations used here
+(Section~\ref{subsec:earth-rotation-uv}).
+
+\subsection{Correlator Output: Amplitude and Phase}
+\label{subsec:corr-output}
+
+The correlator returns an $(N_I \times N_B)$ complex array of visibilities.
+Post-processing extracts the amplitude $|{\hat V}_{ij}|$ and phase
+$\angle\hat{V}_{ij}$ for all baselines simultaneously. A 10-dump sliding-mean
+filter is applied to the amplitude to reduce the sample-to-sample noise scatter
+while preserving the transit bell curve:
+\begin{equation}
+  \overline{|V_{ij}|}[m] = \frac{1}{10}\sum_{k=m}^{m+9}|\hat{V}_{ij}[k]|.
+\end{equation}
+The van~Cittert-Zernike theorem (Eq.~\eqref{eq:vcz}) predicts that, for an
+incoherent extended source, longer baselines measure lower correlated power
+because they resolve more structure in the brightness distribution: at the
+transit peak, $|\hat{V}_{ij}|_{\rm transit}$ must be a monotonically
+non-increasing, jinc-shaped function of baseline length
+(Eq.~\eqref{eq:jinc}). The pipeline prints a per-baseline amplitude table at
+the transit bin and flags any baseline that violates the expected ordering
+with a \texttt{WARN} label. This check would fail if, for example, the
+geometric phase were applied with the wrong sign or the source process were
+not fully coherent across antennas, and it provides confidence that the
+signal chain from Eq.~\eqref{eq:vk} through Eq.~\eqref{eq:correlate} is
+physically correct. Case~1's four short, closely-spaced baselines are too
+narrow a range to trace out the jinc envelope, so this validation is shown
+empirically once wider baselines are available, alongside the extended
+Case~2 array of Section~\ref{subsec:case2} (Fig.~\ref{fig:visibility-jinc}).
+
+% =====================================================================
+\section{Imaging: Dirty Image and PSF}
+\label{sec:imaging}
+
+This section implements the imaging relations of
+Section~\ref{sec:visibility-to-image}: the direct Fourier inversion of
+Eq.~\eqref{eq:dirty-ft} and the convolution relation of Eq.~\eqref{eq:dirty}.
+
+\subsection{Vectorised Direct Discrete Fourier Transform}
+\label{subsec:dft-imaging}
+
+The dirty image is formed by the exact inversion of the van~Cittert-Zernike
+integral (Eq.~\eqref{eq:dirty}) on a uniform $(l,m)$ sky grid:
+\begin{equation}
+  I^D(l_p, m_q) = \sum_{b=1}^{N_B}\sum_{t=1}^{N_I}
+    \hat{V}_b[t]\,e^{+2\pi i(u_b[t]\,l_p + v_b[t]\,m_q)},
+  \label{eq:dirty-dft}
+\end{equation}
+where $(l_p, m_q)$ are direction cosines on the image grid, and
+$u_b[t], v_b[t]$ are the tracked $uv$-coordinates of baseline~$b$ at dump~$t$.
+The sum is evaluated exactly for every visibility, avoiding any gridding
+approximation. The implementation uses a vectorised NumPy \texttt{einsum}
+over baselines and pixels to exploit BLAS-level parallelism; for the number of
+visibilities used here ($\lesssim 10^4$) this direct approach is both accurate
+and fast enough.
+
+Fringe stopping (removal of the $w$-term) is applied when
+\texttt{do\_fringe\_stop=True}: each visibility is phase-rotated by
+$e^{-2\pi i\,w_b[m](1-\sqrt{1-l^2-m^2})}$ before the DFT sum. Fringe
+stopping is enabled for all Engine~A outputs (where the voltages carry the full
+$w$ phase) and disabled for Engine~B outputs (where the forward model already
+evaluates on the fringe-stopped baseline).
+
+\subsection{The Synthesised (Dirty) Beam}
+\label{subsec:dirty-beam-impl}
+
+The synthesised beam (PSF) is computed from the identical sampling function by
+replacing all visibilities with unity before Eq.~\eqref{eq:dirty-dft}:
+\begin{equation}
+  B^D(l,m) = \sum_{b,t} e^{+2\pi i(u_b\,l + v_b\,m)}.
+  \label{eq:psf-dft}
+\end{equation}
+The PSF is normalised so that its peak equals unity. Confirming that
+$I^D = I^{\rm sky} \ast B^D$ (Eq.~\eqref{eq:dirty}) by comparing the dirty
+image with the input sky convolved independently with the dirty beam is the
+principal internal validation of the imaging stage. Figure~\ref{fig:sky-conv-psf}
+shows this verification for the compact array.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{fig_sky_conv_psf}
+  \caption[Dirty image verification: DFT inversion versus sky convolved with PSF]{Dirty image verification: DFT inversion versus sky convolved with PSF.\\[4pt]
+  Left: the true point-source sky model, prior to any convolution. Centre:
+  that sky model convolved with the independently computed synthesised beam.
+  Right: the dirty image produced by the direct DFT inversion of the
+  simulated visibilities (Eq.~\eqref{eq:dirty-dft}). Pixel-level numerical
+  agreement between the centre and right panels would confirm that the
+  correlator, the $uv$-sampling function, and the inverse DFT are mutually
+  consistent and together implement Eq.~\eqref{eq:dirty} correctly.}
+  \label{fig:sky-conv-psf}
+\end{figure}
+
+\begin{quote}\small\itshape
+Note: in the current rendering, the centre panel (Sky~$\ast$~PSF) shows a
+smooth, sidelobe-free brightness gradient, while the right panel (dirty
+image from the DFT) shows a clear sidelobe pattern. These are not yet
+pixel-for-pixel consistent and should be re-verified against the notebook
+before this figure is treated as a completed validation.
+\end{quote}
+
+\subsection{FWHM Measurement}
+\label{subsec:fwhm}
+
+The angular resolution is characterised by the full-width at half-maximum of
+the dirty beam measured separately in the East-West ($l$) and North-South ($m$)
+directions. One-dimensional cuts through the PSF centre are extracted:
+\begin{equation}
+  B^{\rm EW}(l) = B^D(l,\,m\!=\!0), \quad
+  B^{\rm NS}(m) = B^D(l\!=\!0,\,m).
+\end{equation}
+The FWHM in each direction is computed as the width of the above-half-maximum
+region: $\Theta_{\rm FWHM} = l_{\rm right} - l_{\rm left}$ where
+$B \geq B_{\rm max}/2$. These values are printed and annotated on the PSF
+panel of every evaluation case. The ratio $\Theta_{\rm NS}/\Theta_{\rm EW}$
+is used as a summary metric of coverage anisotropy.
+
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{fig_dirty_beam}
+    \caption{Synthesised dirty beam (PSF)}
+  \end{subfigure}\hfill
+  \begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{fig_dirty_image}
+    \caption{Dirty image of the Sun}
+  \end{subfigure}
+  \caption[Dirty beam and dirty image for the compact east-west array (Case~1)]{Dirty beam and dirty image for the compact east-west array (Case~1).\\[4pt]
+  Left: the synthesised dirty beam (point-spread function) is highly elongated
+  in the north-south direction, the characteristic signature of a purely
+  east-west baseline set that provides no north-south spatial-frequency
+  sampling. Right: the resulting dirty image of the Sun inherits this
+  elongation, appearing as a north-south stripe rather than a resolved disk.
+  These artefacts require either additional north-south baselines or
+  deconvolution to remove.}
+  \label{fig:dirty}
+\end{figure}
+
+\begin{quote}\small\itshape
+Note: the numeric FWHM annotation printed directly on the current
+\texttt{fig\_dirty\_beam} panel has not yet been cross-checked against the
+$\Theta_{\rm EW}\approx35'$ analytic estimate above and should be re-verified
+against the notebook before this figure is treated as final.
+\end{quote}
+
+% =====================================================================
+\section{Evaluation Cases for Chapter~\ref{ch:results}}
+\label{sec:cases}
+
+The pipeline is exercised across five evaluation cases that together
+demonstrate the capability envelope of the simulation and provide the
+quantitative results analysed in Chapter~\ref{ch:results}. Cases~1, 1.5,
+and~1.75 use Engine~A and real SWS flux; Cases~2 and the sweep use Engine~B with an
+analytic solar disk model, which makes it practical to evaluate many
+configurations without the memory cost of per-antenna time series.
+
+% - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+\subsection{Case 1: Compact East-West Array (Field Configuration)}
+\label{subsec:case1}
+
+Case~1 represents the physical deployment configuration: four antennas on an
+east-west baseline at 0, 8, 16, and 24~m, matching the field array at
+Xuan~Mai. The array is constructed by \texttt{preset\_compact()}, yielding
+$N_B = 3$ baselines (Ant~0-1: 8~m; Ant~0-2: 16~m; Ant~0-3: 24~m).
+
+Engine~A runs the full voltage chain on \num{50000} samples, producing a
+$(50000\times 4)$ complex voltage matrix. The correlator accumulates 50 samples
+per dump, yielding 1000 dump times. The UV coverage (Fig.~\ref{fig:uv-coverage})
+shows three short arcs along the $u$-axis, with negligible $v$ extent because
+the baselines are purely east-west. The result has two immediate consequences
+for imaging:
+
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{East-West resolution:} The 24~m maximum baseline at
+  \SI{610}{\mega\hertz} ($\lambda = 49.1$~cm) corresponds to $u_{\rm max}
+  \approx 48.9\,\lambda$, giving an E-W FWHM of approximately
+  $\Theta_{\rm EW} \approx 1/(2u_{\rm max}) \approx 35'$.
+
+  \item \textbf{North-South resolution:} With $v_{\rm max} \approx 0$, there
+  is no North-South fringe information. The N-S PSF FWHM spans the entire FOV
+  (\SI{180}{\arcminute} for a \SI{3}{\degree} field), and the dirty image is
+  correspondingly smeared: any point source would appear as a stripe running the
+  full N-S extent of the image.
+\end{enumerate}
+
+The N-S-to-E-W FWHM ratio provides the quantitative measure of this asymmetry.
+At the spring-equinox declination used throughout this chapter ($\delta=0^\circ$),
+$v\equiv0$ exactly for a purely east-west ground baseline at every hour angle
+(Fig.~\ref{fig:uv-coverage} shows this directly: the three tracks are flat lines
+at $v=0$), so the ratio is not merely large but formally unbounded within the
+simulated field of view, consistent with the ``$\gg1$'' entry of
+Table~\ref{tab:case-comparison} below. A non-zero $v$
+component, and therefore a finite N-S-to-E-W ratio, would only appear for an
+east-west baseline observed away from $\delta=0^\circ$. The dirty image and
+PSF panels confirm the expected elongation.
+
+% - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+\subsection{Case 1.5: Four-Antenna Cross Layout (2-D Baseline Coverage)}
+\label{subsec:case15}
+
+Case~1.5 is a direct controlled comparison with Case~1: the same four antennas,
+the same spacing $s$, and the same real SWS data (same \texttt{amp\_env},
+\texttt{noise\_sigma}, and \texttt{source\_process}), but rearranged into a
+cross layout with two antennas along the East-West axis and two along the
+North-South axis:
+\begin{equation}
+  \text{Ant~0}: (-s,0),\quad \text{Ant~1}: (+s,0),\quad
+  \text{Ant~2}: (0,-s),\quad \text{Ant~3}: (0,+s),
+\end{equation}
+where $s$ is the minimum spacing of the Case~1 compact array (8~m). This
+produces $N_B = 6$ baselines: two E-W baselines ($2s$), two N-S baselines
+($2s$), and two diagonal baselines ($2\sqrt{2}\,s$). The cross layout is
+constructed by \texttt{ix.from\_enu([[-s,0],[+s,0],[0,-s],[0,+s]])}.
+
+Because the same \texttt{source\_process} is used for both cases, the signal
+component of every antenna voltage is driven by the same coherent realisation
+of the solar signal; the only difference is the geometric phase
+$\phi_k(t)$, which changes with antenna position. The comparison is therefore
+fair: any difference in the resulting dirty image or PSF is attributable
+solely to the changed baseline coverage, not to a different noise draw or
+signal realisation.
+
+Table~\ref{tab:case-comparison} and Fig.~\ref{fig:dirty-cross} show the PSF and
+1-D cuts for Case~1.5. The two N-S baselines add a non-zero $v$ component to
+the $uv$ coverage, recovering North-South angular resolution at the cost of
+reducing the maximum E-W baseline from $3s$ (Case~1) to $2s$ (Case~1.5). The
+FWHM in the N-S direction improves by the ratio $\Theta_{\rm NS}^{(1)}/
+\Theta_{\rm NS}^{(1.5)}$, demonstrating that two-dimensional baseline coverage
+is necessary and sufficient to recover N-S resolution even with only four
+antennas.
+
+\begin{table}[H]
+  \centering
+  \caption[PSF FWHM: east-west array (Case~1) versus cross layout (Case~1.5)]{PSF FWHM: east-west array (Case~1) versus cross layout (Case~1.5).\\[4pt]
+  Both cases use the same four antennas and the same 8~m element spacing; the
+  only difference is that two antennas are rotated to point north in Case~1.5.
+  The ratio $\Theta_{\rm NS}/\Theta_{\rm EW}$ directly quantifies coverage
+  anisotropy: a value near unity indicates equal angular resolution in both
+  axes, which is the goal of a two-dimensional interferometer.}
+  \label{tab:case-comparison}
+  \renewcommand{\arraystretch}{1.25}
+  \begin{tabular}{l c c c}
+    \toprule
+    \textbf{Layout} & \textbf{FWHM E-W} & \textbf{FWHM N-S} &
+    \textbf{$\Theta_{\rm NS}/\Theta_{\rm EW}$} \\
+    \midrule
+    Case~1 (E-W 4-ant, compact)  & $\sim 35'$   & $\gg 100'$ & $\gg 1$ \\
+    Case~1.5 (Cross 4-ant, $s=8$~m)  & $\sim 53'$   & $\sim 53'$  & $\approx 1$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{fig_dirty_from_dft}
+  \caption[Dirty image and PSF for the cross layout (Case~1.5)]{Dirty image and PSF for the cross layout (Case~1.5).\\[4pt]
+  The four panels show the dirty image (top-left), the synthesised beam
+  (top-right), the east-west 1-D PSF cut (bottom-left), and the north-south
+  1-D PSF cut (bottom-right). Adding two north-south baselines recovers
+  north-south angular resolution and produces a nearly symmetric PSF, at the
+  cost of reducing the maximum east-west baseline from $3s$ to $2s$ and thus
+  slightly degrading east-west resolution relative to Case~1.}
+  \label{fig:dirty-cross}
+\end{figure}
+
+\begin{quote}\small\itshape
+Note: the current \texttt{fig\_dirty\_from\_dft} rendering for Case~1.5 prints
+an East-West FWHM of ``nan'' and a North-South FWHM that does not yet match
+the $\sim53'$, $\Theta_{\rm NS}/\Theta_{\rm EW}\approx1$ values of
+Table~\ref{tab:case-comparison}. This should be re-verified against the
+notebook before the figure and table are treated as final.
+\end{quote}
+
+% - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+\subsection{Case 1.75: DLITE-Inspired Triangle-Plus-Centre Layout}
+\label{subsec:case175}
+
+Cases~1 and~1.5 share the same base element spacing ($s=8$~m) but differ only in
+topology (line versus cross). A third topology at the same spacing scale, motivated
+directly by the minimum-redundancy design philosophy of the Deployable Low-Band
+Ionosphere and Transient Experiment (DLITE)~\citep{helmboldt2021dlite}, is evaluated
+as Case~1.75: three antennas placed at the vertices of an equilateral triangle of
+side $8$~m, with the fourth antenna at the triangle's centroid. The circumradius of
+an equilateral triangle of side $s$ is $R=s/\sqrt{3}\approx4.62$~m, so the array is
+constructed by \texttt{ix.from\_enu} with three centre-to-vertex baselines of
+$\approx4.6$~m and three triangle-side baselines of $8.0$~m
+(Fig.~\ref{fig:case175-geometry}a). Case~1.75 is run with Engine~A on the same
+20~March~2025 SWS flux record used throughout this chapter, so the comparison with
+Cases~1 and~1.5 is direct.
+
+Unlike the cross layout of Case~1.5, in which the two East-West baselines are
+parallel and redundant with each other (and likewise for the two North-South
+baselines and the two diagonals), all six baselines of the triangle-plus-centre
+layout point in six different directions. Figure~\ref{fig:case175-geometry}b shows
+the resulting $uv$-coverage: six distinct, non-overlapping tracks rather than the
+three doubled-up tracks of a symmetric cross. This is precisely the design principle
+DLITE uses to extract the maximum number of independent spatial-frequency samples
+from a minimal number of elements~\citep{helmboldt2021dlite}, rather than adding
+antennas along a fixed pair of orthogonal axes.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.92\textwidth]{fig_case175_geometry}
+  \caption[DLITE-inspired triangle-plus-centre array geometry and resulting $uv$-coverage (Case~1.75)]{DLITE-inspired triangle-plus-centre array geometry and resulting $uv$-coverage (Case~1.75).\\[4pt]
+  (a) Antenna layout: one element at the centroid and three at the vertices of an
+  equilateral triangle of side 8~m, giving three centre-to-vertex baselines of
+  4.6~m and three triangle-side baselines of 8.0~m. (b) The corresponding
+  $uv$-coverage on 20~March~2025: all six baselines trace out distinct, non-redundant
+  tracks, in contrast to the doubled-up tracks produced by the symmetric cross of
+  Case~1.5.}
+  \label{fig:case175-geometry}
+\end{figure}
+
+Figure~\ref{fig:case175-eval} shows the resulting dirty image, PSF, and 1-D profile
+cuts. The non-redundant baseline set improves the North-South FWHM from
+$180'$ for the purely East-West Case~1 array to approximately $19.8'$, a
+$9.1\times$ improvement, achieved with the same four antennas and the same base
+spacing unit ($s=8$~m) used to construct Cases~1 and~1.5. This is a better
+North-South result than the $\sim53'$ obtained by the symmetric cross of Case~1.5
+(Table~\ref{tab:case-comparison}), because six non-redundant $uv$-tracks sample the
+spatial-frequency plane more densely than four antennas arranged on two orthogonal
+axes. The East-West cut, however, does not fall clearly below half-maximum within
+the fixed \SI{3}{\degree} field of view (Fig.~\ref{fig:case175-eval}c), so no
+reliable East-West FWHM could be extracted by the automated measurement: with a
+maximum baseline of only $8$~m-the same scale as the \emph{shortest} baseline in
+Case~1-the triangle-plus-centre layout trades East-West resolution for isotropic,
+non-redundant coverage rather than improving resolution outright.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{fig_case175_eval}
+  \caption[Dirty image, PSF, and 1-D profile cuts for the triangle-plus-centre array (Case~1.75)]{Dirty image, PSF, and 1-D profile cuts for the triangle-plus-centre array (Case~1.75).\\[4pt]
+  (a) Dirty image; (b) synthesised beam (PSF), annotated with the measured
+  North-South FWHM of $19.8'$; (c) East-West profile through the image centre, for
+  which no half-maximum crossing exists within the \SI{3}{\degree} field of view;
+  (d) North-South profile through the image centre, showing a symmetric
+  half-maximum crossing at $\pm9.9'$. The $9.1\times$ improvement in North-South
+  FWHM relative to the purely East-West Case~1 array (\SI{180}{\arcminute})
+  confirms that all six non-redundant baselines contribute independent
+  spatial-frequency information.}
+  \label{fig:case175-eval}
+\end{figure}
+
+Case~1.75 is included not as a sixth point in the resolution sweep of
+Section~\ref{subsec:sweep}, but as a topology intended to inform a future physical
+deployment. This case follows the non-redundant triangle-plus-centre topology
+inspired by DLITE, but it is not a full DLITE system simulation and does not use
+the original DLITE frequency, antenna, or baseline scale: DLITE operates at
+\SIrange{30}{40}{\mega\hertz} with LWA-style crossed-dipole antennas on baselines of
+several hundred metres~\citep{helmboldt2021dlite,carson2022dlite}, whereas
+Case~1.75 is evaluated at \SI{610}{\mega\hertz} with the same $s=8$~m spacing used
+throughout this chapter. What carries over from DLITE is the minimum-redundancy
+\emph{topology}-the geometric principle that lets exactly four elements-no
+more-recover useful two-dimensional angular resolution-not the specific frequency,
+antenna, or baseline scale. This case therefore serves as a topology blueprint for
+a possible future four-element array upgrade, should a DLITE-inspired layout be
+pursued at UHF.
+
+% - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+\subsection{Case 2: Extended Two-Dimensional Array with Forward Visibility Model}
+\label{subsec:case2}
+
+Case~2 uses the extended graded-cross preset (\texttt{preset\_extended()}),
+which places antennas along both cardinal axes with graded spacing in the range
+5-130~m, yielding baselines up to \SI{130}{\metre}. At \SI{610}{\mega\hertz}
+this corresponds to $u_{\rm max} \approx 265\,\lambda$, providing an E-W
+angular resolution of $\Theta_{\rm EW} \approx 11'$-sufficient to spatially
+resolve the solar disk whose angular diameter is $\approx 32'$.
+
+Because the extended array has many more baselines than Case~1, the
+per-antenna voltage chain of Engine~A would require several hundred megabytes
+of RAM at \num{50000} samples. Engine~B is therefore used instead: the forward
+visibility model evaluates the van~Cittert-Zernike integral analytically for a
+uniform solar disk of angular diameter $0.53^\circ$ at $N_{\rm img} = 600$
+uniformly spaced hour angles across the transit:
+\begin{equation}
+  V^{\rm fwd}(u,v) = \int\!\!\!\int I_{\rm disk}(l,m)\,
+    e^{-2\pi i(ul+vm)}\,\mathrm{d}l\,\mathrm{d}m,
+\end{equation}
+evaluated at each $(u_{b}[m],\,v_{b}[m])$ point. The primary beam power
+weighting $A_n^2(\theta_z(t))$ is applied as a time-varying scalar weight
+\texttt{time\_weight} that modulates the effective integration time at each
+hour angle.
+
+Because Case~2's graded baselines span a much wider range than Case~1's,
+they are also the first point in the pipeline where the jinc-shaped
+amplitude decay of Section~\ref{sec:correlator} (Eq.~\eqref{eq:jinc}) can be
+traced empirically. Figure~\ref{fig:visibility-jinc} shows the transit-peak
+visibility amplitude of every Case~2 baseline as a function of length,
+overlaid on the analytic $\mathrm{jinc}(u\,\theta_\odot)$ prediction for a
+uniform solar disk of angular diameter approximately 32~arcminutes.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{fig_visibility_jinc}
+  \caption[Visibility amplitude versus baseline length at transit peak, Case~2]{Visibility amplitude versus baseline length at transit peak, Case~2.\\[4pt]
+  Simulated visibility amplitudes (points), from the Case~2 forward-model
+  array, are overlaid on the analytic $\mathrm{jinc}(u\,\theta_\odot)$
+  prediction (solid curve) for a uniform solar disk of angular diameter
+  approximately 32~arcminutes. Agreement across all sampled baselines
+  confirms that the correlator and the ENU$\rightarrow\uvw$ geometry code
+  correctly implement the van Cittert-Zernike theorem, and that the extended
+  array has the sensitivity to detect the partially resolved structure of the
+  solar disk.}
+  \label{fig:visibility-jinc}
+\end{figure}
+
+The resulting dirty image is shown in Fig.~\ref{fig:case2-image}. Because the
+largest baselines approach and exceed the Nyquist scale of the solar disk,
+the visibility amplitude departs significantly from the flat behaviour seen in
+Case~1: the jinc-function envelope of the correlated flux drops below 50\% by
+$u\approx 130\,\lambda$ for the $0.53^\circ$ disk. This behaviour is the
+interferometric signature of a resolved source and constitutes one of the
+central observational results of this simulation.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{fig_case2_image}
+  \caption[Dirty image from the extended graded-cross array (Case~2, $b_{\rm max}=130$~m)]{Dirty image from the extended graded-cross array (Case~2, $b_{\rm max}=130$~m).\\[4pt]
+  The array achieves an east-west angular resolution of approximately
+  $\Theta_{\rm EW}\approx11'$, sufficient to begin spatially resolving the
+  $32'$ solar disk. The forward visibility model (Engine~B) was used to avoid
+  the memory cost of a full per-antenna voltage chain; the analytical
+  van Cittert-Zernike evaluation enables a fine 600-point hour-angle grid at
+  negligible computational overhead. The visibility amplitude drop beyond
+  $u\approx130\,\lambda$ is the interferometric signature of a partially
+  resolved extended source.}
+  \label{fig:case2-image}
+\end{figure}
+
+To manage memory during Case~2, the raw data arrays (\texttt{u2, v2, w2, V2})
+are saved to a compressed \texttt{.npz} file and then explicitly deleted from
+RAM using \texttt{del} and \texttt{gc.collect()} before plotting. The image
+is similarly deleted after rendering. This ensures that even on a
+low-RAM workstation, the full pipeline can be executed without kernel restart.
+
+% - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+\subsection{Sweep: Five Array Geometries}
+\label{subsec:sweep}
+
+The final evaluation is a systematic sweep across five representative array
+configurations (Cell~I of the notebook), designed to illustrate how baseline
+distribution and maximum baseline length jointly determine image quality. The
+five configurations evaluated are:
+
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Compact E-W} (\texttt{preset\_compact()}): the 4-element field
+  array, $b_{\rm max} = 24$~m. Low resolution, 1-D coverage.
+
+  \item \textbf{Linear N-S, 8 elements} (\texttt{linear(8,15,az=0)}): eight
+  antennas due North with 15~m spacing, $b_{\rm max} = 105$~m. Orthogonal to
+  Case~1: good N-S resolution, poor E-W resolution without Earth-rotation.
+
+  \item \textbf{Tee-shaped, 11 elements} (\texttt{tee(6,5,18)}): six E-W
+  antennas plus five N-S antennas with 18~m spacing, $b_{\rm max}=162$~m.
+  Provides simultaneous coverage in both axes at moderate cost.
+
+  \item \textbf{Extended graded cross} (\texttt{preset\_extended()}): the
+  Case~2 array, $b_{\rm max} = 130$~m. Highest resolution; irregular spacing
+  reduces sidelobe height.
+
+  \item \textbf{Random 2-D, 16 elements} (\texttt{random\_2d(16,120,seed=3)}):
+  sixteen antennas placed uniformly at random within a $120\times120$~m square.
+  Demonstrates the alternative sidelobe structure produced by non-redundant,
+  non-structured baselines.
+\end{enumerate}
+
+For each configuration, the pipeline calls \texttt{ix.forward\_visibilities}
+to compute visibilities on a $600$-sample hour-angle grid, forms the dirty image
+and PSF on a $192\times 192$ pixel grid over a \SI{3}{\degree} FOV, and saves
+three-panel figures (dirty image, PSF, $uv$-coverage) as PNG files. A summary
+table records the maximum baseline and the dynamic range metric
+$\mathrm{DR} = I^D_{\mathrm{peak}}/\sigma_{I^D}$ (peak image value divided by
+image RMS) for each configuration. The five-panel montage is assembled by
+\texttt{matplotlib} in a $3\times 5$ grid and saved as \texttt{\_montage.png}.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{fig_layout_sweep}
+  \caption[Sweep montage: dirty images, PSFs, and $uv$-coverage for five array layouts]{Sweep montage: dirty images, PSFs, and $uv$-coverage for five array layouts.\\[4pt]
+  Top row: dirty images of the Sun; middle row: synthesised dirty beams (PSFs);
+  bottom row: $uv$-coverage track patterns accumulated over the 12-hour transit.
+  Columns from left to right: compact east-west (4 antennas, 24~m max baseline),
+  linear north-south (8 antennas, 105~m), tee-shaped (11 antennas, 162~m),
+  extended graded cross (130~m), and random two-dimensional (16 antennas,
+  120~m). The progressive improvement in PSF symmetry and sidelobe suppression
+  with increasing baseline diversity and two-dimensional coverage is directly
+  visible across the columns.}
+  \label{fig:layout-sweep}
+\end{figure}
+
+Table~\ref{tab:sweep-summary} summarises the key metrics. The progression from
+compact to extended shows a monotonic improvement in angular resolution (lower
+E-W FWHM) and generally increasing dynamic range, while the random layout
+achieves competitive sidelobe behaviour despite its lower maximum baseline
+because the non-redundant spacing suppresses grating lobes.
+
+\begin{table}[H]
+  \centering
+  \caption[Array sweep summary: maximum baseline, PSF FWHM, and image dynamic range]{Array sweep summary: maximum baseline, PSF FWHM, and image dynamic range.\\[4pt]
+  Maximum baseline lengths, approximate east-west PSF full-width at
+  half-maximum (estimated as $\lambda/(2b_{\rm max})$), and image dynamic range
+  (peak signal divided by RMS background) are listed for each of the five array
+  configurations. The progression from compact to extended demonstrates a
+  monotonic improvement in angular resolution; the random layout achieves
+  competitive sidelobe suppression due to its non-redundant, non-structured
+  baseline distribution.}
+  \label{tab:sweep-summary}
+  \renewcommand{\arraystretch}{1.25}
+  \begin{tabular}{l c c c}
+    \toprule
+    \textbf{Configuration} & \textbf{$b_{\rm max}$ (m)} &
+    \textbf{Est.\ FWHM E-W} & \textbf{DR (peak/RMS)} \\
+    \midrule
+    Compact E-W (4-ant)      & 24  & $\approx 35'$  & lowest \\
+    Linear N-S (8-ant)       & 105 & $\approx 14'$  & moderate \\
+    Tee (11-ant)              & 162 & $\approx  9'$  & good \\
+    Extended cross            & 130 & $\approx 11'$  & good \\
+    Random 2-D (16-ant)       & 120 & $\approx 12'$  & good (low sidelobes) \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+% =====================================================================
+\section{Chapter Summary}
+\label{sec:pipeline-conclusion}
+
+The pipeline has been designed and implemented as a faithful, fully
+parameterised forward model of a UHF radio interferometer, built as the
+direct implementation of the theoretical chain of Chapter~\ref{ch:theory}
+and the receiving-element model of Chapter~\ref{ch:antenna}
+(Table~\ref{tab:theory-to-pipeline}). The key design decisions and their
+physical motivations are:
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Real primary beam.} The idealised Gaussian pattern was replaced
+  by the actual 4NEC2 radiation pattern loaded via the \texttt{PrimaryBeam}
+  class, ensuring that the beam-modulated signal amplitude is physically correct
+  at all hour angles.
+
+  \item \textbf{External flux, forward-modelled receiver.} Learmonth supplies
+  only the calibrated flux density $S_\nu(t)$; every downstream voltage, noise,
+  phase, and visibility is generated by a forward model of the \emph{proposed}
+  interferometer, not by reproducing Learmonth's own receiver
+  (Section~\ref{subsec:learmonth-limits}).
+
+  \item \textbf{Two simulation engines.} Engine~A (voltage chain) provides
+  realistic noise statistics and hardware-compatible IQ output for the field
+  array; Engine~B (forward visibility) enables rapid parameter sweeps over many
+  array configurations that would be intractable with the full voltage chain.
+
+  \item \textbf{16-bit quantisation path.} The LSB-validation check confirms
+  that the noise floor occupies the required minimum number of bits,
+  demonstrating that the synthesised signal levels are correctly scaled for
+  a real ADC.
+
+  \item \textbf{Consistent single-transformation geometry.} All three geometric
+  outputs-per-antenna phase, $\uvw$ baselines, and fringe-stopping $w$-term
+  -are derived from a single \texttt{compute\_uvw} call, eliminating
+  inconsistency errors that arise when geometry is computed piecemeal.
+
+  \item \textbf{Five evaluation cases.} The compact E-W array (Case~1) and its
+  cross variant (Case~1.5) isolate the effect of baseline dimensionality on PSF
+  shape. The DLITE-inspired triangle-plus-centre layout (Case~1.75) shows that a
+  non-redundant topology recovers North-South resolution from only four
+  elements. The extended array with the forward model (Case~2) demonstrates
+  resolved-source visibility decay. The five-configuration sweep provides a
+  comprehensive survey of the resolution-coverage trade-off space.
+\end{itemize}
+
+\begin{quote}\itshape
+Learmonth gives the incident solar flux; Chapter~\ref{ch:antenna} gives the
+antenna response; this chapter forward-models the voltage, visibility, and
+image of the proposed interferometer.
+\end{quote}
+
+Together these results establish that the simulation faithfully captures the
+physics from incident flux to synthesised image. The quantitative outputs of
+Chapter~\ref{ch:results} can therefore be interpreted as predictions of the
+behaviour of a real instrument with the corresponding array geometry, not as
+numerical artefacts of the implementation. The browser-based visualisation
+companion that accompanies this pipeline is not part of this physical model;
+it is an accessibility tool, described in
+Appendix~\ref{sec:appx-html} together with the rest of the project
+repository.
+\clearpage

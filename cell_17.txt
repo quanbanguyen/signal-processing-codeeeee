@@ -13,7 +13,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import numpy as np
-from scipy.ndimage import convolve as nd_convolve
+from scipy.signal import fftconvolve
 from scipy.special import j1
 import os, shutil
 
@@ -90,7 +90,7 @@ _save("fig_voltage_env.png")
 
 # ══════════════════════════════════════════════════════════════════════
 # [3]  fig_fringe_pattern
-#      Fringe thực sự: Re(V₀₁) theo thời gian → chu kỳ ~14 phút (8m @ 610 MHz, δ=0°)
+#      Fringe thực sự: Re(V₀₁) theo thời gian → chu kỳ ~7.5 phút
 #      Nguồn: visibilities, IDX_01 (Cell E)
 # ══════════════════════════════════════════════════════════════════════
 t_vis       = np.linspace(0, 12, NI)
@@ -113,7 +113,7 @@ t_min = (t_vis[mask] - 6.0) * 60   # phút lệch so với đỉnh transit
 axes[1].plot(t_min, fringe_real[mask], color='royalblue', lw=1.0)
 axes[1].set_xlabel("Time relative to transit peak  (minutes)")
 axes[1].set_ylabel("Re(V₀₁)  (V²)")
-axes[1].set_title("Zoom: ±60 min around transit  →  fringe period ≈ 14 min  (B=8 m, f=610 MHz)")
+axes[1].set_title("Zoom: ±60 min around transit  →  fringe period ≈ 7.5 min")
 axes[1].grid(True, alpha=0.3, ls='--')
 
 fig.tight_layout()
@@ -135,8 +135,6 @@ ax.set_xlabel("u  (wavelengths λ)")
 ax.set_ylabel("v  (wavelengths λ)")
 ax.set_title("UV coverage — compact E–W array (Case 1)\n"
              "20 March 2025,  H ∈ [±90°]  (δ = 0° → v ≡ 0,  EW array has no N–S resolution)")
-# With δ=0° and a purely EW array, v = B·sin(δ)·cos(H) = 0 for all baselines.
-# set_aspect('equal') on degenerate v=0 data causes LinAlgError in tight_layout.
 _u_max = float(np.abs(u).max()) * 1.08
 ax.set_xlim(-_u_max, _u_max)
 ax.set_ylim(-_u_max * 0.12, _u_max * 0.12)
@@ -245,7 +243,7 @@ sky_mdl  = (np.sqrt(lg**2 + mg**2) <= sun_r).astype(float)   # đĩa đều 32�
 psf_b    = ix.make_dirty_image(
     u, v, w, np.ones_like(u), fov_deg=FOV_DEG, grid=GRID, do_fringe_stop=False)[0]
 psf_n    = psf_b / (psf_b.sum() + 1e-30)
-sky_conv = nd_convolve(sky_mdl, psf_n, mode='wrap')
+sky_conv = fftconvolve(sky_mdl, psf_n, mode='same')
 sky_conv = sky_conv / sky_conv.max()
 
 # forward-model (Engine B) trên chính u,v,w của Case 1 — cùng sky với (a)/(b)
@@ -336,6 +334,105 @@ fig.suptitle(
     fontsize=10
 )
 _save("fig_dirty_from_dft.png")
+
+# ══════════════════════════════════════════════════════════════════════
+# [9.75] fig_case175_dirty_from_dft  —  Case 1.75 TAM GIÁC + TÂM (DLITE): 4 panel
+#        Nguồn: img_t, psf_t, la_t, ma_t, fwhm_ew_t, fwhm_ns_t (Cell G3)
+# ══════════════════════════════════════════════════════════════════════
+ext_t     = [la_t[0], la_t[-1], ma_t[0], ma_t[-1]]
+ic_t      = np.argmin(np.abs(la_t))
+ir_t      = np.argmin(np.abs(ma_t))
+img_t_n   = img_t / img_t.max()
+
+fig = plt.figure(figsize=(11, 9))
+gs  = gridspec.GridSpec(2, 2, hspace=0.40, wspace=0.32)
+
+# (a) dirty image
+ax1 = fig.add_subplot(gs[0, 0])
+im1 = ax1.imshow(img_t_n, extent=ext_t, origin='lower', cmap='hot',
+                 vmin=0, vmax=1, aspect='equal')
+ax1.plot(sun_r*np.cos(theta_c), sun_r*np.sin(theta_c), 'c--', lw=1.3)
+ax1.set_title("(a)  Dirty image — triangle+centre layout (Case 1.75)")
+ax1.set_xlabel("E–W  (arcmin)"); ax1.set_ylabel("N–S  (arcmin)")
+plt.colorbar(im1, ax=ax1, shrink=0.87)
+
+# (b) PSF
+ax2 = fig.add_subplot(gs[0, 1])
+im2 = ax2.imshow(psf_t, extent=ext_t, origin='lower', cmap='RdBu_r',
+                 vmin=-0.5, vmax=1, aspect='equal')
+ax2.plot([-fwhm_ew_t/2, fwhm_ew_t/2], [0, 0], 'y-', lw=2.2,
+         label=f"FWHM E–W = {fwhm_ew_t:.1f}′")
+ax2.plot([0, 0], [-fwhm_ns_t/2, fwhm_ns_t/2], 'c-', lw=2.2,
+         label=f"FWHM N–S = {fwhm_ns_t:.1f}′")
+ax2.set_title(f"(b)  PSF — DLITE-style triangle 4-ant")
+ax2.set_xlabel("E–W  (arcmin)"); ax2.set_ylabel("N–S  (arcmin)")
+ax2.legend(fontsize=7.5)
+plt.colorbar(im2, ax=ax2, shrink=0.87)
+
+# (c) E–W 1D cut
+ax3 = fig.add_subplot(gs[1, 0])
+ax3.plot(la_t, img_t_n[ir_t, :], color='darkorange', lw=1.8, label='Dirty image')
+ax3.plot(la_t, psf_t[ir_t, :],   color='gray',        lw=1.2, ls='--', label='PSF')
+ax3.axhline(0.5, color='gold', ls=':', lw=1, label=f"FWHM = {fwhm_ew_t:.1f}′")
+ax3.set_xlabel("E–W offset  (arcmin)")
+ax3.set_ylabel("Normalised intensity")
+ax3.set_title("(c)  E–W profile through centre")
+ax3.legend(fontsize=8); ax3.grid(True, alpha=0.3, ls='--')
+
+# (d) N–S 1D cut
+ax4 = fig.add_subplot(gs[1, 1])
+ax4.plot(ma_t, img_t_n[:, ic_t], color='royalblue', lw=1.8, label='Dirty image')
+ax4.plot(ma_t, psf_t[:, ic_t],   color='gray',       lw=1.2, ls='--', label='PSF')
+ax4.axhline(0.5, color='cyan', ls=':', lw=1, label=f"FWHM = {fwhm_ns_t:.1f}′")
+ax4.set_xlabel("N–S offset  (arcmin)")
+ax4.set_ylabel("Normalised intensity")
+ax4.set_title("(d)  N–S profile through centre")
+ax4.legend(fontsize=8); ax4.grid(True, alpha=0.3, ls='--')
+
+fig.suptitle(
+    f"Case 1.75 — DLITE-style triangle+centre layout (Helmboldt et al. 2021)\n"
+    f"N–S FWHM: {fwhm_ns:.1f}′ (Case 1, E–W only)  →  {fwhm_ns_t:.1f}′ "
+    f"(Case 1.75, triangle)  [{fwhm_ns/fwhm_ns_t:.1f}× improvement,  "
+    f"{n_dir_tri}/6 baseline directions unique vs {n_dir_cross}/6 for cross]",
+    fontsize=10
+)
+_save("fig_case175_dirty_from_dft.png")
+
+# ══════════════════════════════════════════════════════════════════════
+# [9.76] fig_case175_array_uv  —  Case 1.75: bố trí anten + UV coverage
+#        Nguồn: ARRAY_TRI, u_t, v_t, NB_t, bl_labels_t (Cell G3)
+# ══════════════════════════════════════════════════════════════════════
+pos_E_t = ARRAY_TRI.positions_enu[:, 0]
+pos_N_t = ARRAY_TRI.positions_enu[:, 1]
+cmap_t  = plt.cm.tab10(np.linspace(0, 0.9, NB_t))
+
+fig, (axL, axR) = plt.subplots(1, 2, figsize=(11, 4.5))
+
+for b, (i, j) in enumerate(ARRAY_TRI.pairs):
+    axL.plot([pos_E_t[i], pos_E_t[j]], [pos_N_t[i], pos_N_t[j]],
+             color=cmap_t[b], lw=1.8, label=bl_labels_t[b])
+axL.scatter(pos_E_t, pos_N_t, s=140, color='white', edgecolor='navy', zorder=3)
+for k in range(ARRAY_TRI.n_ant):
+    axL.annotate(f"Ant {k}", (pos_E_t[k], pos_N_t[k]),
+                 textcoords="offset points", xytext=(0, 8),
+                 ha='center', fontsize=8, color='navy')
+axL.set_xlabel("East  (m)"); axL.set_ylabel("North  (m)")
+axL.set_title(f"(a)  Bố trí anten — tam giác đều + tâm (cạnh = {s:.0f} m)")
+axL.set_aspect('equal'); axL.grid(True, alpha=0.3, ls='--')
+axL.legend(fontsize=7, loc='upper right')
+
+for b in range(NB_t):
+    kw = dict(s=1.5, color=cmap_t[b], label=bl_labels_t[b])
+    axR.scatter( u_t[:, b],  v_t[:, b], **kw)
+    axR.scatter(-u_t[:, b], -v_t[:, b], s=1.5, color=cmap_t[b])
+axR.set_xlabel("u  (wavelengths λ)"); axR.set_ylabel("v  (wavelengths λ)")
+axR.set_title("(b)  UV coverage — triangle+centre (Case 1.75)")
+axR.set_aspect('equal'); axR.grid(True, alpha=0.3, ls='--')
+axR.legend(fontsize=7, markerscale=6, loc='upper right')
+
+fig.suptitle("Case 1.75 — DLITE-style array geometry & UV coverage,  20 March 2025", fontsize=10.5)
+fig.tight_layout()
+_save("fig_case175_array_uv.png")
 
 # ══════════════════════════════════════════════════════════════════════
 # [10] fig_case2_image  —  Dirty image Case 2 (extended graded-cross)

@@ -1,0 +1,967 @@
+% =====================================================================
+%  CHAPTER 2 --- THEORETICAL BACKGROUND
+% =====================================================================
+\chapter{THEORETICAL BACKGROUND}
+\label{ch:theory}
+
+This chapter builds a single chain of reasoning, from the Sun to the
+simulated image, and every equation below is one specific link in that
+chain-not an independent piece of theory. Told as one sentence: the Sun
+produces radio emission; the international community measures this emission
+as a \emph{flux density}, in solar flux units; a receiving antenna converts
+that flux density into received radio-frequency \emph{power}; a receiver
+converts that power into a \emph{voltage}, together with its own unavoidable
+thermal noise; several antennas at known positions see the same signal with a
+small, geometry-dependent phase difference; a \emph{correlator} combines a
+pair of antenna voltages into a single complex number called the
+\emph{visibility}; the array geometry places every visibility at its correct
+point in a Fourier $(u,v)$ plane; and an inverse Fourier transform of those
+points produces the \emph{dirty image} analysed in Chapter~\ref{ch:results}.
+The sections below develop this chain in order, introducing each equation
+only once the preceding step has produced the quantity it needs. Not every
+equation plays the same role, and this chapter says so explicitly at each
+step: some equations (for example Eq.~\eqref{eq:friis}, \eqref{eq:vrms},
+\eqref{eq:johnson}, and \eqref{eq:uvw}) are computational steps that the
+simulation of Chapter~\ref{ch:pipeline} evaluates directly; others (for
+example Eq.~\eqref{eq:fringeperiod}, \eqref{eq:vcz}-\eqref{eq:jinc}, and
+\eqref{eq:dirty}) are analytic results that the simulation is not built from,
+but is instead checked against, as validation benchmarks in
+Chapter~\ref{ch:results}.
+
+In outline: Section~\ref{sec:solar-activity} places the solar radio burst
+inside the wider picture of solar activity and motivates the observing
+frequency used in this thesis. Section~\ref{sec:radioastro-quantities} turns
+that physical picture into the standard radio-astronomy quantities-brightness
+temperature and flux density-that the simulation can actually work with.
+Section~\ref{sec:flux-to-voltage} carries the flux density through the
+receiving antenna to a voltage at the receiver input, and
+Section~\ref{sec:noise} adds the unavoidable thermal noise and states how
+averaging improves sensitivity. Section~\ref{sec:voltage-to-visibility}
+explains how two such voltages are combined by a correlator into a single
+complex visibility. Section~\ref{sec:uvw-coverage} shows how the physical
+antenna positions and the Earth's rotation determine which visibilities can
+actually be measured. Section~\ref{sec:visibility-to-image} closes the chain
+by turning a set of measured visibilities back into an image of the sky.
+Section~\ref{sec:chapter-summary} collects the chain into one summary and
+sorts its equations into the two roles above. The treatment of interferometry
+and synthesis imaging follows closely the formalism of
+\citet{taylor1999synthesis}, \emph{Synthesis Imaging in Radio Astronomy II},
+whose Chapters~1-3 are the principal reference for
+Sections~\ref{sec:voltage-to-visibility}-\ref{sec:visibility-to-image}.
+Equations are numbered within the chapter for cross-reference in the later
+design and results chapters.
+
+% =====================================================================
+\section{Solar Radio Activity and Observation Target}
+\label{sec:solar-activity}
+
+\subsection{Solar Flare, CME, Geomagnetic Storm, and Solar Radio Burst}
+\label{subsec:flare-cme-storm}
+The Sun does not only shine in visible light. It radiates across almost the
+entire electromagnetic spectrum, from X-rays to radio waves, and each part of
+that spectrum reveals a different physical process. Chapter~\ref{ch:intro}
+motivated this thesis from the practical side: solar activity can disturb
+satellites, GNSS, and power grids, and this is why monitoring the Sun matters.
+This section gives the physical picture behind that motivation, introducing
+the events in the order in which they actually happen.
+
+A \emph{solar flare} is a sudden release of magnetic energy stored in the
+corona, usually above a sunspot group, which heats the local plasma and
+accelerates electrons and ions to high energy on timescales of
+minutes~\citep{dulk1985,mclean1985}. A \emph{coronal mass ejection} (CME) is a
+related but distinct event: a large-scale eruption of coronal plasma and
+magnetic field that is expelled outward, sometimes reaching the Earth in one
+to three days. A flare or a CME-driven shock can also accelerate protons and
+electrons to much higher energies than the ambient plasma; when these escape
+into interplanetary space they are observed as a \emph{solar energetic
+particle} (SEP) event. When a CME, a SEP event, or a fast stream of solar
+wind reaches the Earth's magnetosphere, it can compress and disturb it,
+producing a \emph{geomagnetic storm}-the event responsible for the
+satellite-drag incident described in
+Chapter~\ref{ch:intro}~\citep{berger2023starlink}. A geomagnetic storm, in
+turn, can change the electron density of the Earth's upper atmosphere,
+producing an \emph{ionospheric disturbance} that degrades GNSS signals, as
+discussed in Chapter~\ref{ch:intro}~\citep{floressoriano2024gnss}.
+
+A \emph{solar radio burst} (SRB) is the radio-frequency signature of the same
+energetic processes: as electrons are accelerated and plasma is disturbed by
+flares, shocks, and CMEs, they emit radio waves that are, unlike the CME
+plasma itself, detectable from the ground within seconds. This is why solar
+radio bursts are useful as an early, remote indicator of the eruptive
+activity that eventually leads to a geomagnetic storm or an ionospheric
+disturbance. Table~\ref{tab:solar-terms} collects the terms introduced above,
+for reference throughout the rest of this chapter.
+
+\begin{table}[H]
+  \centering
+  \caption[Key terms used to describe solar activity and solar radio emission]{Key terms used to describe solar activity and solar radio emission.}
+  \label{tab:solar-terms}
+  \renewcommand{\arraystretch}{1.3}
+  \begin{tabularx}{\textwidth}{l >{\raggedright\arraybackslash}X}
+    \toprule
+    \textbf{Term} & \textbf{Meaning} \\
+    \midrule
+    Solar flare & Sudden release of magnetic energy in the corona; heats plasma and accelerates particles on a timescale of minutes. \\
+    Coronal mass ejection (CME) & Large-scale eruption of coronal plasma and magnetic field, expelled outward from the Sun. \\
+    Solar energetic particle (SEP) event & Burst of high-energy protons and electrons, accelerated by a flare or a CME-driven shock, that can reach the Earth. \\
+    Geomagnetic storm & Disturbance of the Earth's magnetosphere caused by a CME, a SEP event, or a fast solar-wind stream; can increase atmospheric drag on satellites (Chapter~\ref{ch:intro}). \\
+    Ionospheric disturbance & Change in the electron density of the Earth's ionosphere, often following a geomagnetic storm, that can degrade GNSS signals (Chapter~\ref{ch:intro}). \\
+    Solar radio burst (SRB) & Radio-frequency signature of the energetic processes above; classified into Types~I-V (Section~\ref{subsec:burst-types}). \\
+    Quiet Sun & Steady, thermal radio background present even when no burst is occurring (Section~\ref{subsec:quiet-sun-brightness}). \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{Solar Radio Burst Types and Observing Frequency Ranges}
+\label{subsec:burst-types}
+At radio wavelengths the Sun is not the sharp-edged disk seen in visible light
+but a stratified, optically thick plasma whose apparent size and brightness
+depend strongly on the observing frequency~\citep{kundu1965,dulk1985}. Three
+atmospheric layers matter to a radio observer: the photosphere (the
+\SI{5800}{\kelvin} optical surface, dominant only at millimetre wavelengths),
+the chromosphere, and the hot, tenuous corona, whose electron temperature
+reaches $\sim\!\SI{e6}{\kelvin}$. At metre and decimetre wavelengths the
+radiation received originates predominantly in the corona and upper
+chromosphere.
+
+Superimposed on the steady, thermal background (Section~\ref{subsec:quiet-sun-brightness})
+are the transient solar radio bursts introduced above, which can raise the
+flux by several orders of magnitude. Following the classical morphological
+scheme, they are grouped into five types (I-V) according to their appearance
+in the dynamic spectrum, and each type is associated with a characteristic
+frequency range~\citep{wild1963,mclean1985}:
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Type~I} noise storms: long-lived, narrowband emission,
+        typically \SIrange{50}{300}{\mega\hertz}.
+  \item \textbf{Type~II} bursts: slowly drifting (of order \SI{1}{\mega\hertz\per\second}),
+        associated with coronal and interplanetary shock waves, typically
+        starting below \SI{150}{\mega\hertz} and drifting down to hundreds of
+        kilohertz as the shock propagates outward.
+  \item \textbf{Type~III} bursts: fast-drifting, produced by electron beams
+        streaming along open field lines; they can start above
+        \SI{1}{\giga\hertz} and sweep down through the decimetre and metre
+        bands within seconds.
+  \item \textbf{Type~IV} continua: broadband, following flares, spanning the
+        decimetre to metre range and sometimes lasting hours.
+  \item \textbf{Type~V} continua: short (tens of seconds), sometimes following
+        Type~III bursts.
+\end{itemize}
+These frequency ranges span several named observing bands: \emph{decametric}
+(below about \SI{30}{\mega\hertz}), \emph{metric} (roughly
+\SIrange{30}{300}{\mega\hertz}), \emph{decimetric} or \emph{UHF} (roughly
+\SI{300}{\mega\hertz} to \SI{3}{\giga\hertz}), and \emph{microwave} (above
+\SI{3}{\giga\hertz}). The \SI{610}{\mega\hertz} band used in this thesis lies
+inside the decimetric/UHF range. At decimetre wavelengths, the emission most
+often seen is the fast-drifting tail of Type~III bursts as they sweep through
+the band, the decimetric/microwave continuum associated with Type~IV events,
+and narrowband spike bursts produced by non-thermal (plasma or
+gyrosynchrotron) emission mechanisms. This emission is spatially compact,
+which is precisely what makes a burst a meaningful target for a small
+interferometer.
+
+\begin{figure}[H]
+  \centering
+  \begin{overpic}[width=\textwidth]{fig_solar_dynamic_spectrum}
+    \put(68,25){\color{white}\rule{22\unitlength}{4\unitlength}}
+    \put(79,26.5){\makebox(0,0){\textcolor{blue!40!black}{\bfseries\large I~Storm}}}
+  \end{overpic}
+  \caption[Solar dynamic spectrum showing Type I--V burst classification]{Solar dynamic spectrum showing Type I--V burst classification.\\[4pt]
+  The schematic frequency--time plot illustrates the quiet-Sun background
+  continuum and the five burst categories. Type~I storms appear as
+  narrowband chains; the fast-drifting Type~III lanes are produced by electron
+  beams escaping along open field lines and are the dominant transient signature
+  at decimetre wavelengths; slowly drifting Type~II arcs trace coronal shock
+  fronts driven by coronal mass ejections.
+  Adapted from \citet{mclean1985} and \citet{dulk1985}; the long-duration,
+  narrowband Type~I noise-storm label on the source figure has been corrected
+  here (originally mislabelled).}
+  \label{fig:dynamic-spectrum}
+\end{figure}
+
+\subsection{Why 610 MHz, and Why the Quiet Sun Is Useful for Validation}
+\label{subsec:why-610mhz}
+Chapter~\ref{ch:intro} explained the practical reasons for working at
+\SI{610}{\mega\hertz}: archived flux data are freely available at this
+frequency, and low-cost UHF Yagi-Uda antennas are easy to obtain. The physical
+picture above adds the remaining justification. First, \SI{610}{\mega\hertz}
+still falls inside the decimetric/UHF band where flare-related non-thermal
+emission-the fast-drifting tail of Type~III bursts, decimetric continua, and
+spike bursts-is observed, so the band is not physically irrelevant to solar
+radio-burst work, even though the strongest and most frequently studied
+bursts (Type~II and Type~III at their onset) are usually observed at lower
+frequencies, tens of MHz, closer to the metric/decametric band used by
+instruments such as DLITE~\citep{carson2022dlite}. Second, and just as
+important for this thesis, the \emph{quiet Sun}-the steady, thermal background
+described in Section~\ref{subsec:quiet-sun-brightness}-is present at
+\SI{610}{\mega\hertz} every day, regardless of whether a burst occurs. Its
+brightness is stable and well characterised, so it provides a predictable,
+always-available source against which the geometry, timing, and signal chain
+of the simulated interferometer can be validated. A burst is unpredictable
+and, for a first-generation instrument, this thesis therefore uses the quiet
+Sun, observed during the transit of \mbox{20 March 2025} at Learmonth, as the
+validation target: any departure of the simulated response from the expected
+analytic result can then be attributed to the instrument model rather than to
+unpredictable source variability.
+
+% =====================================================================
+\section{From Solar Radio Emission to Flux Density}
+\label{sec:radioastro-quantities}
+
+\subsection{Specific Intensity and Brightness Temperature}
+\label{subsec:quiet-sun-brightness}
+A radio telescope does not measure temperature directly, the way a
+thermometer does. It measures the intensity of the radio radiation arriving
+from the sky. In the absence of activity, the \emph{quiet Sun} radiates by
+thermal free-free (bremsstrahlung) emission, and in radio astronomy it is
+conventional to express this intensity as an equivalent \emph{brightness
+temperature} $T_b$: the temperature that a blackbody would need to have in
+order to produce the same observed specific intensity $I_\nu$ at frequency
+$\nu$. In the radio (Rayleigh-Jeans) limit, this definition is written as
+\begin{equation}
+  I_\nu = \frac{2 k_B \nu^2}{c^2}\,T_b ,
+  \label{eq:rj}
+\end{equation}
+where:
+\begin{itemize}[leftmargin=1.5em,itemsep=1pt,topsep=2pt]
+  \item $I_\nu$ is the specific intensity, in $\si{\watt\per\square\metre\per\hertz\per\steradian}$;
+  \item $T_b$ is the brightness temperature, in kelvin;
+  \item $\nu$ is the observing frequency, in hertz;
+  \item $k_B$ is Boltzmann's constant, which appears because it is the
+        physical constant that converts a temperature in kelvin into an
+        energy scale;
+  \item $c$ is the speed of light \citep{dulk1985,kraus1986}.
+\end{itemize}
+At \SI{610}{\mega\hertz} the quiet-Sun brightness temperature is of order
+$10^5$-$10^6~\si{\kelvin}$. Equation~\eqref{eq:rj} is a \emph{definition} of
+what brightness temperature means-it is not a computational step that the
+simulation evaluates. The simulation never needs a numerical value of $T_b$:
+it works directly with the flux density introduced next, which is the
+quantity an antenna actually collects. Brightness temperature is given here
+only because it is the standard way the radio-astronomy literature describes
+how bright the quiet Sun is, and because it makes the stability argument of
+Section~\ref{subsec:why-610mhz} precise: the quiet Sun's brightness
+temperature is steady from day to day, so departures from the predicted
+fringe pattern can be attributed to the instrument rather than to the source.
+
+\subsection{Flux Density and the Solar Flux Unit}
+\label{subsec:flux-sfu}
+The specific intensity $I_\nu$ describes the brightness of a resolved source
+per unit solid angle, which is not directly what a receiver measures. What a
+receiver actually collects is the \emph{flux density} $S_\nu$-the intensity
+integrated over the angular extent of the source-expressed in
+$\si{\watt\per\square\metre\per\hertz}$. For the Sun, the integrated flux
+density is a few tens of solar flux units \citep{dulk1985,kundu1965}, where
+one solar flux unit is
+\begin{equation}
+  1~\sfu = \SI{e-22}{\watt\per\square\metre\per\hertz}.
+  \label{eq:sfu}
+\end{equation}
+The solar flux unit is the standard scale on which archived solar radio
+observatories, including Learmonth, report their measurements. In this
+thesis, the archived Learmonth flux record $S_\nu(t)$, in solar flux units at
+\SI{610}{\mega\hertz}, is the external physical input of the simulation: it
+is why the solar flux unit matters here, and it is the quantity that
+Sections~\ref{sec:flux-to-voltage}-\ref{sec:visibility-to-image} carry through
+every remaining stage of the theoretical chain.
+
+\subsection{From Flux Density to a Simulation Input \texorpdfstring{$S_\nu(t)$}{Sν(t)}}
+\label{subsec:sv-of-t}
+The Learmonth archive does not provide a continuous function of time; it
+provides a sequence of flux-density samples recorded at fixed intervals over
+the course of a day, in SFU, at \SI{610}{\mega\hertz}. To use this record as
+the input of a time-domain simulation, the discrete samples are converted to
+SI units using Eq.~\eqref{eq:sfu} and then interpolated to produce a
+continuous function $S_\nu(t)$ that can be evaluated at every simulation time
+step, however finely the array geometry or receiver chain is sampled. The
+details of the interpolation, and the archived file format from which
+$S_\nu(t)$ is built, are given in Chapter~\ref{ch:pipeline}. What matters here
+is the role $S_\nu(t)$ plays in the theoretical chain: it is the single
+external input that carries the real, measured behaviour of the Sun into
+every later stage of the simulation, from the received voltage
+(Section~\ref{sec:flux-to-voltage}) to the final image
+(Section~\ref{sec:visibility-to-image}).
+
+% =====================================================================
+\section{From Solar Flux to Received Voltage}
+\label{sec:flux-to-voltage}
+A solar flux density is not yet an electrical signal. To simulate a
+receiver, $S_\nu(t)$ must be converted, step by step, into a received
+radio-frequency power and then into a voltage that a digitiser could
+actually sample. This section carries out that conversion.
+
+\subsection{Antenna Gain, Primary Beam, and Effective Aperture}
+\label{subsec:antenna-gain-beam}
+A receiving antenna converts the incident electromagnetic field into a
+voltage at its terminals. Its directional sensitivity is described by the
+\emph{normalised power pattern} $A_n(\theta,\phi)$, which for a receiving
+element is identical to its transmitting pattern by reciprocity. The
+\emph{directivity} $D$ and \emph{gain} $G$ follow from
+\begin{equation}
+  D = \frac{4\pi}{\displaystyle\iint_{4\pi} A_n(\theta,\phi)\,\mathrm{d}\Omega},
+  \qquad G = \eta\,D,
+  \label{eq:directivity}
+\end{equation}
+where:
+\begin{itemize}[leftmargin=1.5em,itemsep=1pt,topsep=2pt]
+  \item $A_n(\theta,\phi)$ is the normalised power pattern (equal to 1 at
+        boresight), as a function of the usual spherical angles
+        $(\theta,\phi)$;
+  \item $\eta$ is the radiation efficiency (fraction of input power actually
+        radiated);
+  \item $\mathrm{d}\Omega$ is an element of solid angle, in steradians \citep{balanis2016,stutzman2013}.
+\end{itemize}
+The \emph{half-power beamwidth} (HPBW) is the angular width over which
+$A_n \geq 0.5$, and it sets the field of view of a single element. Once the
+sky position is expressed in the direction-cosine coordinates $(l,m)$ used
+later in this chapter, the same normalised pattern is written $A_n(l,m)$; in
+an interferometer this is exactly the \emph{primary beam} that multiplies the
+sky brightness in Section~\ref{sec:visibility-to-image}. Using one
+isolated-element pattern for every antenna in the array assumes that the
+elements do not interact electromagnetically with one another; this
+assumption is checked directly, by a mutual-coupling study of the real array,
+in Chapter~\ref{ch:antenna}.
+
+For imaging purposes the key quantity derived from the gain is the
+\emph{effective aperture} $A_e(\theta,\phi)$,
+\begin{equation}
+  A_e = \frac{\lambda^2}{4\pi}\,G ,
+  \label{eq:aeff}
+\end{equation}
+where $\lambda$ is the observing wavelength and $G$ is the gain of
+Eq.~\eqref{eq:directivity} \citep{balanis2016,tms2017}; $A_e$ has units of
+area and is, loosely, the area over which the antenna effectively collects
+power from an incident plane wave.
+
+The receiving element used throughout this thesis is a Yagi-Uda array: a
+single driven element (here a folded dipole), a reflector behind it, and
+several directors in front. The parasitic elements re-radiate with phases set
+by their length and spacing, producing an end-fire pattern with gain typically
+in the range \SIrange{8}{12}{dBi}. The folded dipole raises the driven-element
+impedance to roughly four times that of a simple dipole, which eases matching
+to the feed. Besides the gain and HPBW already defined above, the relevant
+figure of merit for how well the element is matched to its feed line is the
+standing-wave ratio
+\begin{equation}
+  \mathrm{SWR} = \frac{1+|\Gamma|}{1-|\Gamma|},
+  \qquad
+  \Gamma = \frac{Z_\mathrm{in}-Z_0}{Z_\mathrm{in}+Z_0},
+  \label{eq:swr}
+\end{equation}
+where $Z_\mathrm{in}$ is the antenna input impedance and $Z_0$ is the
+feed-line impedance (\SI{75}{\ohm} for the coaxial cable used)
+\citep{pozar2012,balanis2016}. These quantities are computed for the real
+element in Chapter~\ref{ch:antenna}.
+
+\subsection{Friis Reception Relation}
+\label{subsec:friis}
+With the effective aperture available, a source of flux density $S_\nu$
+observed over a bandwidth $\Delta\nu$ delivers, to a matched load, a received
+power given by the Friis reception relation~\citep{friis1946}:
+\begin{equation}
+  P_\mathrm{rx} = \tfrac{1}{2}\,A_e\,S_\nu\,\Delta\nu ,
+  \label{eq:friis}
+\end{equation}
+where:
+\begin{itemize}[leftmargin=1.5em,itemsep=1pt,topsep=2pt]
+  \item $S_\nu$ is the flux density of the source, in
+        $\si{\watt\per\square\metre\per\hertz}$ (Section~\ref{subsec:flux-sfu});
+  \item $\Delta\nu$ is the receiver bandwidth, in hertz;
+  \item $A_e$ is the effective aperture of Eq.~\eqref{eq:aeff};
+  \item the factor $\tfrac12$ accounts for a single received polarisation of
+        unpolarised radiation \citep{tms2017,kraus1986};
+  \item $P_\mathrm{rx}$ is the resulting received power, in watts.
+\end{itemize}
+Equation~\eqref{eq:friis} is the bridge between the astronomical flux scale
+and the receiver, and it is a computational step evaluated directly by the
+simulation: it takes $S_\nu(t)$ from Section~\ref{subsec:sv-of-t} and turns it
+into a received power $P_\mathrm{rx}(t)$, as implemented in
+Chapter~\ref{ch:pipeline}.
+
+\subsection{Voltage Equivalent at the Receiver Input}
+\label{subsec:voltage-equiv}
+The simulation, like a real digitiser, works with voltages, not power. For a
+receiver with a resistive load $R_\mathrm{load}$, the received power of
+Eq.~\eqref{eq:friis} corresponds to a root-mean-square signal voltage
+\begin{equation}
+  V_\mathrm{rms} = \sqrt{P_\mathrm{rx}\,R_\mathrm{load}} ,
+  \label{eq:vrms}
+\end{equation}
+where $P_\mathrm{rx}$ is the received power of Eq.~\eqref{eq:friis} and
+$R_\mathrm{load}$ is the load resistance seen by the antenna; the relation
+follows directly from $P=V_\mathrm{rms}^2/R$ for a matched resistive load.
+Equation~\eqref{eq:vrms} is the last step of the chain from flux to voltage,
+and, like Eq.~\eqref{eq:friis}, it is evaluated directly by the simulation in
+Chapter~\ref{ch:pipeline} (Section~\ref{sec:voltage-synth}). The antenna's
+directional response enters at this same voltage level, by multiplying
+$V_\mathrm{rms}$ with the square root of the normalised primary beam $A_n$
+evaluated at the Sun's instantaneous position, so that a source away from
+boresight produces a smaller voltage than the same source at boresight. This
+gives the deterministic, signal part of the antenna voltage; the next section
+adds the part that is not deterministic.
+
+% =====================================================================
+\section{Receiver Noise and Averaging}
+\label{sec:noise}
+Even though the Sun produces a measurable flux density, a real receiver never
+observes that signal alone. Every channel also carries thermal noise
+contributed by the antenna itself, the sky, the ground, the cable, the
+low-noise amplifier, and the rest of the receiver chain. A faithful
+simulation must therefore generate not only the deterministic solar voltage of
+Eq.~\eqref{eq:vrms}, but also a statistically correct noise voltage to add to
+it. This section builds that noise model and then asks how averaging can
+recover a weak signal from underneath it.
+
+\subsection{System Temperature and Johnson-Nyquist Noise}
+\label{subsec:johnson-noise}
+Any resistive element at physical temperature $T$ generates a fluctuating
+voltage, even with no signal present~\citep{nyquist1928}. The available noise
+power in a bandwidth $\Delta\nu$ is, in the Rayleigh-Jeans limit,
+\begin{equation}
+  P_n = k_B\,T\,\Delta\nu ,
+  \label{eq:johnson}
+\end{equation}
+where:
+\begin{itemize}[leftmargin=1.5em,itemsep=1pt,topsep=2pt]
+  \item $k_B$ is Boltzmann's constant, as in Eq.~\eqref{eq:rj};
+  \item $T$ is the physical temperature of the noise-generating element, in
+        kelvin;
+  \item $\Delta\nu$ is the bandwidth, in hertz;
+  \item $P_n$ is the resulting noise power, in watts.
+\end{itemize}
+Equation~\eqref{eq:johnson} underlies the convention of expressing every
+noise contribution as an equivalent \emph{noise temperature}. The total
+\emph{system temperature} $T_\mathrm{sys}$ sums the sky, ground, antenna, and
+receiver contributions, and the system-equivalent flux density follows from
+Eq.~\eqref{eq:friis} as $\mathrm{SEFD}=2k_B T_\mathrm{sys}/A_e$
+\citep{tms2017,kraus1986}. Exactly as for the signal in
+Section~\ref{subsec:voltage-equiv}, the simulation needs a voltage, not a
+power: the noise power of Eq.~\eqref{eq:johnson} is converted to a noise
+voltage with standard deviation
+\begin{equation}
+  \sigma_n = \sqrt{\tfrac{1}{2}\,P_n\,R_\mathrm{load}} ,
+  \label{eq:noise-voltage}
+\end{equation}
+where the factor $\tfrac12$ splits the total noise power equally between the
+in-phase and quadrature components of the complex baseband signal. In the
+simulation, $T_\mathrm{sys}$ is a single configurable parameter, and
+Eqs.~\eqref{eq:johnson}-\eqref{eq:noise-voltage} are applied independently to
+every antenna to draw a fresh noise voltage at every time step, exactly as
+independent thermal noise would arise in every physical receiver channel.
+Adding this noise voltage to the signal voltage of Eq.~\eqref{eq:vrms} gives
+the complete per-antenna complex voltage used in Chapter~\ref{ch:pipeline}
+(Section~\ref{sec:voltage-synth}).
+
+\subsection{Radiometer Equation, and Why Averaging Helps}
+\label{subsec:radiometer}
+Equation~\eqref{eq:noise-voltage} shows that noise is always present, but it
+does not yet say whether a given signal can be recovered from underneath it.
+The \emph{radiometer equation} answers that question: it gives the smallest
+detectable change in antenna temperature after integrating for a time $\tau$
+over a bandwidth $\Delta\nu$,
+\begin{equation}
+  \Delta T_\mathrm{rms} = \frac{T_\mathrm{sys}}{\sqrt{\Delta\nu\,\tau}} ,
+  \label{eq:radiometer}
+\end{equation}
+where $T_\mathrm{sys}$ is the system temperature of
+Section~\ref{subsec:johnson-noise}, $\Delta\nu$ is the bandwidth, and $\tau$
+is the integration (averaging) time \citep{tms2017,kraus1986}. This equation
+is not itself a step that generates simulated data; its role is to explain
+\emph{why} the time-averaging performed by the correlator in
+Chapter~\ref{ch:pipeline} improves the signal-to-noise ratio: thermal noise
+is a random process with zero mean, so summing more independent samples,
+either by integrating longer or by using a wider bandwidth, averages the
+noise toward zero while the steady solar signal adds coherently. This
+$1/\sqrt{\Delta\nu\,\tau}$ scaling is the statistical foundation on which both
+single-dish detection and interferometric correlation rest, and it is
+reproduced explicitly by the noise model of Section~\ref{sec:voltage-synth} in
+Chapter~\ref{ch:pipeline}.
+
+\subsection{Signal-to-Noise Interpretation for the Simulation}
+\label{subsec:snr-interpretation}
+Combining Eqs.~\eqref{eq:friis}, \eqref{eq:johnson}, and \eqref{eq:radiometer}
+gives a direct way to ask whether a given signal is detectable: the quiet-Sun
+or burst flux density is converted to an equivalent antenna temperature and
+compared with $\Delta T_\mathrm{rms}$ for the integration time and bandwidth
+in use. If the equivalent signal temperature is well above $\Delta
+T_\mathrm{rms}$, the source should be visible above the noise floor in the
+simulated voltages and, after correlation, in the simulated visibilities; if
+it is comparable to or below $\Delta T_\mathrm{rms}$, no amount of correct
+geometry will recover a clean fringe, which is exactly the situation
+encountered in the field deployment described in Chapter~\ref{ch:intro}. This
+comparison is carried out quantitatively for the simulated instrument in
+Section~\ref{sec:snr-analysis} of Chapter~\ref{ch:results}.
+
+% =====================================================================
+\section{From Antenna Voltage to Interferometric Visibility}
+\label{sec:voltage-to-visibility}
+Every antenna in the array now has its own complex voltage: a deterministic
+part from Eq.~\eqref{eq:vrms} and a random noise part from
+Eq.~\eqref{eq:noise-voltage}. A single antenna, however, can only measure
+\emph{power}-the mean value of the squared voltage-and power alone carries no
+information about \emph{where} on the sky the signal came from. Recovering
+that positional information is the job of interferometry, and it starts from
+a simple geometric fact: a celestial source is composed of a vast number of
+independent radiating regions-electrons gyrating incoherently in the corona,
+for instance-so the radiation received from any two distinct directions on
+the sky is statistically independent. This property, that the source is
+\emph{spatially incoherent}, is the single most important physical assumption
+in interferometry: the coherence measured \emph{between two antennas} does
+not arise because the source itself is coherent, but because the same
+incoherent field is sampled at two separated points, and the geometric delay
+between those points encodes information about the source's angular
+structure. This is precisely the principle exploited in the early twentieth
+century by the Michelson stellar interferometer, in which two mirror
+apertures, fed into a common eyepiece, produce fringes whose contrast falls as
+the angular size of the source increases relative to $\lambda/b$; it is the
+optical-astronomy ancestor of the radio-interferometric technique developed
+below.
+
+\subsection{Geometric Delay and Phase}
+\label{subsec:geometric-delay}
+Consider two identical antennas, separated by a baseline vector $\bm{b}$, that
+both receive the wavefront from a point source in direction $\hat{\bm{s}}$.
+Because the two antennas are not at the same point in space, the wavefront
+reaches one of them slightly later than the other. This time difference is
+the \emph{geometric delay} \citep{taylor1999synthesis,tms2017}
+\begin{equation}
+  \tau_g = \frac{\bm{b}\cdot\hat{\bm{s}}}{c},
+  \label{eq:taug}
+\end{equation}
+where $\bm{b}$ is the baseline vector between the two antennas, $\hat{\bm{s}}$
+is the unit vector pointing toward the source, and $c$ is the speed of light.
+At a centre frequency $\nu_0$, this delay corresponds to a phase difference
+$2\pi\nu_0\tau_g$ between the two antenna voltages: this is the entire
+physical origin of everything that follows in this section. Because the
+Earth rotates, $\hat{\bm{s}}$ changes slowly with time relative to $\bm{b}$,
+so $\tau_g$, and therefore the phase difference, also changes with time. In a
+real instrument the bulk of this delay is compensated electronically-a
+process called \emph{fringe stopping}-by inserting a compensating delay
+$\tau_g$ in one signal path before correlation, so that the residual delay
+tracks only the difference between the true geometric delay and the model
+delay used by the correlator.
+
+\subsection{Two-Element Correlation}
+\label{subsec:two-element-correlation}
+A \emph{correlator} multiplies the voltage outputs of two antennas and
+time-averages the product. For a single point source, the correlator output
+after fringe stopping and averaging over many carrier cycles is the real part
+of a complex response:
+\begin{equation}
+  r(\tau_g) \propto \cos\!\big(2\pi\nu_0\,\tau_g\big)
+            = \cos\!\Big(\frac{2\pi}{\lambda}\,\bm{b}\cdot\hat{\bm{s}}\Big).
+  \label{eq:fringe}
+\end{equation}
+This is the celebrated \emph{interference fringe} \citep{taylor1999synthesis}:
+as the Earth rotates, $\hat{\bm{s}}$ sweeps slowly across the sky relative to
+$\bm{b}$, and the correlator output traces out a slowly varying cosine whose
+instantaneous frequency is the \emph{fringe rate}. In practice a \emph{complex
+correlator} forms both an in-phase output ($\cos$) and a quadrature output
+($\sin$, obtained by inserting a quarter-wave phase shift in one path before
+the second multiplication), so that the full complex response, amplitude and
+phase, of the source on that baseline is recovered, rather than only its real
+part.
+
+For an east-west baseline of length $b$ observing a source at hour angle $H$
+and declination $\delta$, differentiating Eq.~\eqref{eq:taug} with respect to
+time gives the rate of change of fringe phase, and hence the fringe period
+\begin{equation}
+  T_\mathrm{fringe} \approx \frac{\lambda}{b\,\omega_\oplus\,\cos\delta},
+  \label{eq:fringeperiod}
+\end{equation}
+where $\lambda$ is the observing wavelength, $b$ is the baseline length, $\delta$
+is the source declination, and $\omega_\oplus$ is the Earth's sidereal
+rotation rate \citep{taylor1999synthesis,tms2017}. For $b=\SI{8}{\metre}$,
+$\lambda=\SI{0.49}{\metre}$ and the solar declination at the spring equinox
+($\delta = 0^\circ$), this evaluates to approximately $14$~minutes.
+Equation~\eqref{eq:fringeperiod} is \emph{not} used to generate the simulated
+data; it plays a different role, as an independent analytic prediction used
+only afterwards, in Chapter~\ref{ch:results}, to check whether the simulated
+fringe behaves the way theory says it must. It is the most basic and most
+directly verifiable analytic signature of an interferometer, and for that
+reason it is the first validation benchmark used in this thesis.
+
+The derivation above implicitly assumed a single frequency $\nu_0$. In
+practice every receiver has finite bandwidth $\Delta\nu$, and correlating over
+that bandwidth attenuates the fringe amplitude if the residual delay error
+after fringe stopping, $\Delta\tau = \tau_g - \tau_\mathrm{model}$, is not
+negligible. Integrating a uniform passband of width $\Delta\nu$ centred on
+$\nu_0$ introduces a multiplicative attenuation factor
+\begin{equation}
+  \mathrm{sinc}\!\big(\Delta\nu\,\Delta\tau\big)
+  = \frac{\sin(\pi\,\Delta\nu\,\Delta\tau)}{\pi\,\Delta\nu\,\Delta\tau},
+  \label{eq:bandwidth-smearing}
+\end{equation}
+known as \emph{bandwidth smearing} \citep{tms2017}. Because the residual delay
+error in this simulation is determined entirely by the known geometry rather
+than by an imperfect delay model, this effect is small for the narrow field of
+the quiet Sun and is quantified in Chapter~\ref{ch:pipeline}.
+
+\subsection{Visibility Amplitude and Phase}
+\label{subsec:visibility-amp-phase}
+Section~\ref{subsec:two-element-correlation} described the correlator in
+terms of an idealised continuous field. In terms of the actual per-antenna
+complex voltages built in Sections~\ref{sec:flux-to-voltage}
+and~\ref{sec:noise}, $v_i(t)$ and $v_j(t)$, what the correlator for antenna
+pair $(i,j)$ computes is
+\begin{equation}
+  V_{ij} = \big\langle v_i(t)\,v_j^{*}(t) \big\rangle ,
+  \label{eq:correlator-def}
+\end{equation}
+where:
+\begin{itemize}[leftmargin=1.5em,itemsep=1pt,topsep=2pt]
+  \item $v_i(t)$ is the complex voltage at antenna $i$;
+  \item $v_j^{*}(t)$ is the complex conjugate of the voltage at antenna $j$;
+  \item $\langle\cdot\rangle$ denotes a time average, long enough to average
+        down the noise (Section~\ref{subsec:radiometer}) but short enough
+        that the source itself is effectively unchanged.
+\end{itemize}
+The result $V_{ij}$ is a single complex number that combines both an
+amplitude and a phase: this number is the \emph{complex visibility},
+$V=|V|\,e^{i\phi}$. Its amplitude $|V|$ measures the degree of coherence of
+the field between the two antennas-equal to the total received flux for a
+baseline short enough to be insensitive to the source's angular size, and
+falling as the baseline lengthens and begins to resolve the source-while its
+phase $\phi$ encodes the position of the source relative to the
+phase-tracking centre. This is the key conceptual difference between a single
+antenna and an interferometer: \emph{a single antenna measures power; a pair
+of antennas measures spatial coherence}, and it is this spatial-coherence
+measurement, repeated over many baselines and over time, that ultimately
+allows an image to be reconstructed.
+
+For an extended, spatially incoherent source, Eq.~\eqref{eq:correlator-def}
+generalises the point-source fringe of Eq.~\eqref{eq:fringe} to an integral
+over the whole sky brightness distribution $I(\hat{\bm{s}})$:
+\begin{equation}
+  V(\bm{b}) = \int_{\Omega} I(\hat{\bm{s}})\,
+  \exp\!\Big[-i\,2\pi\nu_0\,\frac{\bm{b}\cdot\hat{\bm{s}}}{c}\Big]\,\mathrm{d}\Omega ,
+  \label{eq:coherence-relation}
+\end{equation}
+where the integral is taken over the solid angle $\Omega$ occupied by the
+source \citep{taylor1999synthesis,tms2017}. Equation~\eqref{eq:coherence-relation}
+already contains the essential physics of synthesis imaging: the visibility
+measured on a baseline $\bm{b}$ is a weighted, phase-shifted integral of the
+sky brightness, so an array that samples many different baselines is, in
+effect, sampling many different weighted integrals of the same unknown sky.
+Turning this statement into a precise, invertible imaging equation requires a
+convenient coordinate system for the baseline and the sky, which
+Section~\ref{sec:uvw-coverage} introduces next, and the formal statement of
+the imaging relation is given in Section~\ref{sec:visibility-to-image}.
+
+% =====================================================================
+\section{From Physical Baselines to \texorpdfstring{$uvw$}{uvw} Coverage}
+\label{sec:uvw-coverage}
+Equation~\eqref{eq:coherence-relation} is written in terms of a baseline
+vector $\bm{b}$ and a source direction $\hat{\bm{s}}$, but it says nothing yet
+about how $\bm{b}$ is actually obtained from the physical layout of the array,
+or how it changes as the source moves across the sky. That is the purpose of
+this section: it connects the antenna positions that are physically surveyed
+in the field to the coordinate frame in which the visibility integral is most
+naturally expressed.
+
+\subsection{ENU Ground Coordinates}
+\label{subsec:enu}
+Every antenna in the array has a fixed physical position on the ground,
+measured in a local East-North-Up (ENU) frame tangent to the Earth at the
+observing site. The baseline vector $\bm{b}$ used throughout
+Section~\ref{sec:voltage-to-visibility} is simply the difference between the
+ENU positions of two antennas. This is the natural frame in which an array is
+laid out and surveyed in the field, and it is the starting point of the
+coordinate chain used in Chapter~\ref{ch:pipeline} to describe an arbitrary
+two-dimensional array layout, not only a single east-west line.
+
+\subsection{Source-Based \texorpdfstring{$uvw$}{uvw} Coordinates}
+\label{subsec:uvw-transform}
+Visibility, however, is most naturally expressed in a frame tied to the
+source direction, not to the ground: this is why Eq.~\eqref{eq:coherence-relation}
+is written with $\bm{b}\cdot\hat{\bm{s}}$ rather than with the raw ENU
+coordinates. The array geometry must therefore be transformed from
+ground-based ENU coordinates to source-based spatial-frequency coordinates,
+conventionally called $(u,v,w)$. Obtaining that frame takes two steps, as
+described by \citet{taylor1999synthesis}. First, the local ENU antenna
+positions are converted to an Earth-fixed equatorial $(X,Y,Z)$ frame, in which
+$X$ points to the intersection of the equator and the local meridian, $Y$
+points east, and $Z$ points to the celestial pole. Second, this equatorial
+frame is rotated, for the instantaneous hour angle $H$ and declination
+$\delta$ of the phase-tracking centre, into the baseline-dependent $(u,v,w)$
+frame in which $w$ points along the source direction:
+\begin{equation}
+  \begin{bmatrix} u\\ v\\ w \end{bmatrix}
+  =
+  \begin{bmatrix}
+    \sin H & \cos H & 0\\
+    -\sin\delta\cos H & \sin\delta\sin H & \cos\delta\\
+    \cos\delta\cos H & -\cos\delta\sin H & \sin\delta
+  \end{bmatrix}
+  \begin{bmatrix} X_\lambda\\ Y_\lambda\\ Z_\lambda \end{bmatrix},
+  \label{eq:uvw}
+\end{equation}
+where:
+\begin{itemize}[leftmargin=1.5em,itemsep=1pt,topsep=2pt]
+  \item $H$ is the hour angle of the phase-tracking centre;
+  \item $\delta$ is its declination;
+  \item $(X_\lambda,Y_\lambda,Z_\lambda)$ are the equatorial baseline
+        components, expressed in units of wavelength;
+  \item $(u,v,w)$ are the resulting source-based baseline coordinates, also
+        in units of wavelength, with $u$ and $v$ spanning the plane
+        perpendicular to the source direction and $w$ along it
+        \citep{taylor1999synthesis,tms2017}.
+\end{itemize}
+This single, general transformation is applied identically to every baseline
+and every instant in the simulation pipeline, so that per-antenna geometric
+phase, instantaneous baseline length, and fringe-stopping delay are all
+computed from one consistent geometric model, valid for arbitrary
+two-dimensional array layouts rather than only for the east-west case of
+Eq.~\eqref{eq:taug}.
+
+\subsection{Earth Rotation and \texorpdfstring{$uv$}{uv}-Coverage}
+\label{subsec:earth-rotation-uv}
+The set of $(u,v)$ points sampled by an interferometric array-its
+\emph{$uv$-coverage}-dictates the array's imaging capability, in direct
+analogy to the way the aperture of a filled-aperture telescope determines its
+point-spread function. A single snapshot with $N$ antennas yields $N(N-1)/2$
+instantaneous baselines, hence $N(N-1)/2$ independent samples of $V(u,v)$
+(each baseline contributing two complex-conjugate samples at $\pm(u,v)$, since
+$I(l,m)$ is real and therefore $V(-u,-v)=V^{*}(u,v)$). For the four-element
+array of this thesis, $N=4$ gives only six instantaneous baselines-far too
+sparse, on its own, to constrain a two-dimensional image.
+
+As the Earth rotates, however, the projection of any fixed physical baseline
+onto the plane perpendicular to the source direction changes continuously,
+because the rotation matrix in Eq.~\eqref{eq:uvw} depends on the hour angle
+$H$. For a baseline with equatorial components $(X_\lambda,Y_\lambda,Z_\lambda)$
+observing a source at fixed declination $\delta$, eliminating $H$ between the
+$u$ and $v$ equations of Eq.~\eqref{eq:uvw} shows that each baseline traces an
+\emph{ellipse} in the $(u,v)$ plane as $H$ varies over the day, with
+semi-major axis equal to the projected east-west baseline length and
+semi-minor axis foreshortened by $\sin\delta$. This technique, known as
+\emph{Earth-rotation synthesis} \citep{taylor1999synthesis}, allows a small
+number of physical antennas to synthesise, over the course of a transit, a
+$uv$-coverage equivalent to a much larger number of simultaneous baselines,
+without any moving parts. It is the reason a four-element, six-baseline array
+can nonetheless produce a meaningful synthesised image once data accumulated
+over an observing transit are combined-a trade-off explored quantitatively,
+for the compact east-west geometry of the physical array against more general
+two-dimensional configurations, in Chapter~\ref{ch:results}.
+
+Earth-rotation synthesis assumes that each visibility sample is attributed to
+a single, exact $(u,v)$ point, when in fact it is an average over the
+integration time of one correlator dump. If the integration time is long
+enough for $H$ to change appreciably, a source away from the phase-tracking
+centre is smeared tangentially in the $uv$ plane, an effect known as
+\emph{time-average smearing}, in direct analogy to the bandwidth smearing of
+Eq.~\eqref{eq:bandwidth-smearing}. For the short integration times and narrow
+field of the quiet Sun used in this thesis this effect is small, and it is
+quantified together with bandwidth smearing in Chapter~\ref{ch:pipeline}.
+
+% =====================================================================
+\section{From Visibility to Dirty Image}
+\label{sec:visibility-to-image}
+
+\subsection{Van Cittert-Zernike Theorem}
+\label{subsec:vcz}
+Visibility is useful precisely because, under the two assumptions already
+introduced-an incoherent source (Section~\ref{sec:voltage-to-visibility}) and
+a narrow field of view-it is related to the sky brightness by an ordinary
+two-dimensional Fourier transform. In this small-field limit, appropriate for
+the compact solar disk observed in this thesis, the relation is
+\begin{equation}
+  V(u,v) = \iint A_n(l,m)\,I(l,m)\,e^{-2\pi i(ul+vm)}\,\mathrm{d}l\,\mathrm{d}m ,
+  \label{eq:vcz}
+\end{equation}
+where:
+\begin{itemize}[leftmargin=1.5em,itemsep=1pt,topsep=2pt]
+  \item $I(l,m)$ is the sky brightness distribution;
+  \item $A_n(l,m)$ is the normalised primary beam of a single antenna
+        (Section~\ref{subsec:antenna-gain-beam});
+  \item $(l,m)$ are direction cosines on the sky, measured relative to the
+        phase-tracking centre;
+  \item $(u,v)$ are the baseline components in wavelengths, from
+        Section~\ref{sec:uvw-coverage}.
+\end{itemize}
+This is the \emph{van Cittert-Zernike theorem} as used throughout synthesis
+imaging \citep{taylor1999synthesis,tms2017}: the visibility and the (apodised)
+sky brightness are Fourier conjugates, so that, given sufficient and suitable
+sampling of $V(u,v)$, the sky brightness can in principle be recovered by
+inverse Fourier transformation. Each baseline therefore samples one point in
+this Fourier $(u,v)$ plane, and it is the combination of many simultaneous
+baselines with the additional points that Earth rotation supplies over time
+(Section~\ref{subsec:earth-rotation-uv}) that builds up usable $uv$-coverage.
+
+Equation~\eqref{eq:vcz} is a simplification of a more general relation that
+keeps a third baseline coordinate, $w$, and a corresponding phase term:
+\begin{equation}
+  V(u,v,w) = \iint A_n(l,m)\,I(l,m)\,
+  e^{-2\pi i\,[\,ul + vm + w(n-1)\,]}\,
+  \frac{\mathrm{d}l\,\mathrm{d}m}{n},
+  \qquad n=\sqrt{1-l^2-m^2} .
+  \label{eq:visibility}
+\end{equation}
+If the primary beam is narrow enough that $l,m\ll1$ over the region where
+$A_nI\neq0$, then $n-1\approx-\tfrac12(l^2+m^2)$ is small, and provided the
+$w$-term phase error $2\pi w(n-1)$ remains $\ll1$ radian across the field of
+view, the $w$-dependence may be dropped entirely and Eq.~\eqref{eq:visibility}
+reduces exactly to Eq.~\eqref{eq:vcz}. For the solar disk, whose
+\SI{32}{\arcminute} angular diameter subtends $l,m\sim5\times10^{-3}$, and for
+the short, near-zenith baselines used in this thesis, the $w$-term is indeed
+negligible, and the small-field relation of Eq.~\eqref{eq:vcz} applies without
+correction. For a wider field of view or a longer-baseline array than used in
+this thesis, the $w$-term of Eq.~\eqref{eq:visibility} would have to be
+retained.
+
+A baseline of length $|\bm{b}|$ measured in wavelengths corresponds, through
+Eq.~\eqref{eq:vcz}, to an angular scale of order $1/|\bm{b}|_\lambda$ radians
+on the sky. For a uniformly bright circular disk of angular radius
+$\theta_s$ (a simplistic but effective model for the quiet Sun), the
+two-dimensional Fourier transform in Eq.~\eqref{eq:vcz} has the closed
+analytic form
+\begin{equation}
+  V(q) = \frac{2 J_1(2\pi q \theta_s)}{2\pi q \theta_s} \equiv \jinc(2\pi q\theta_s),
+  \qquad q=\sqrt{u^2+v^2},
+  \label{eq:jinc}
+\end{equation}
+where $J_1$ is the first-order Bessel function of the first kind and $q$ is
+the baseline length in wavelengths \citep{tms2017,taylor1999synthesis}. The
+$\jinc$ function falls monotonically from unity at $q=0$ (the disk's total
+flux, measured on a zero-length baseline) to its first null at
+$q\theta_s\approx0.61$, beyond which the visibility amplitude is small and
+oscillatory. Like the fringe period of Eq.~\eqref{eq:fringeperiod},
+Eq.~\eqref{eq:jinc} is not used to generate simulated data; it is an
+independent analytic target, computed separately from the simulation, against
+which the simulated visibilities of the resolved solar disk are validated in
+Chapter~\ref{ch:results}: a correctly implemented simulation must reproduce
+both the $\jinc$ envelope and the location of its first null as a function of
+baseline length.
+
+Two further practical error sources act on the phase of the visibility rather
+than on its amplitude, and are worth noting here because they affect the
+imaging step directly. \emph{Phase-calibration and pointing errors} shift and
+blur the reconstructed image; in this simulation the geometry is known
+exactly, so they are introduced only as controllable perturbations
+(Chapter~\ref{ch:pipeline}). \emph{Ionospheric phase} is, for the short
+baselines used in this thesis ($\lesssim\SI{130}{\metre}$ at
+\SI{610}{\mega\hertz}), essentially common-mode between antennas and cancels
+in the differential (baseline) measurement, with a residual differential
+phase of about one degree.
+
+\subsection{Direct Fourier Inversion}
+\label{subsec:fourier-inversion}
+Because only a finite, discrete set of $(u,v)$ points is ever sampled, it is
+convenient to describe the measurement formally as a multiplication of the
+true, continuous visibility function by a \emph{sampling function} $S(u,v)$-a
+sum of Dirac delta functions (optionally weighted to account for the relative
+sensitivity or density of different baselines) located at each measured
+$(u,v)$ point and its conjugate. The measured visibility is then
+$S(u,v)\,V(u,v)$, and inverse-Fourier-transforming this sampled, rather than
+continuous, visibility does not yield the true sky brightness $I$, but rather
+the \emph{dirty image} $I_\mathrm{D}$:
+\begin{equation}
+  I_\mathrm{D}(l,m) = \iint S(u,v)\,V(u,v)\,e^{+2\pi i(ul+vm)}\,\mathrm{d}u\,\mathrm{d}v .
+  \label{eq:dirty-ft}
+\end{equation}
+where $S(u,v)$ is the sampling function defined above and $V(u,v)$ is the
+measured visibility of Eq.~\eqref{eq:vcz} at each sampled point.
+Equation~\eqref{eq:dirty-ft} is the direct inversion that the simulation
+actually carries out in Chapter~\ref{ch:pipeline}: every measured visibility
+is placed at its $(u,v)$ location and the sampled function is
+inverse-Fourier-transformed, with no further processing such as
+deconvolution.
+
+\subsection{Dirty Beam, PSF, and the Convolution Relation}
+\label{subsec:dirty-beam}
+By the convolution theorem \citep{taylor1999synthesis}, multiplication of $V$
+by $S$ in the Fourier ($uv$) domain corresponds to convolution in the image
+domain, so Eq.~\eqref{eq:dirty-ft} may equivalently, and more usefully, be
+written as the \emph{Convolution Equation} of synthesis imaging
+\citep{taylor1999synthesis}:
+\begin{equation}
+  I_\mathrm{D}(l,m) = I(l,m) * B(l,m),
+  \label{eq:dirty}
+\end{equation}
+where $*$ denotes two-dimensional convolution, $I(l,m)$ is the true sky
+brightness, and the \emph{dirty beam} (equivalently, the
+\emph{point-spread function}, PSF, or \emph{synthesised beam}) $B(l,m)$ is
+simply the Fourier transform of the sampling function itself,
+\begin{equation}
+  B(l,m) = \iint S(u,v)\,e^{+2\pi i(ul+vm)}\,\mathrm{d}u\,\mathrm{d}v .
+  \label{eq:dirtybeam}
+\end{equation}
+Equations~\eqref{eq:dirty}-\eqref{eq:dirtybeam} \citep{taylor1999synthesis,tms2017}
+express the fundamental imaging equation of an interferometer: the dirty
+image is exactly what one would expect from imaging the true sky through an
+instrument whose response to a point source is the beam $B(l,m)$-a direct
+radio analogue of the diffraction-limited PSF of an optical telescope, except
+that here the PSF is determined not by a filled aperture but by the discrete
+pattern of sampled $(u,v)$ points. Put practically: the dirty image is
+\emph{not} a perfect picture of the true sky. It is the true sky "stamped"
+by the array's PSF, and because $S(u,v)$ is a sparse, typically non-uniform
+set of samples rather than a filled, azimuthally symmetric disk (as for a
+filled-aperture telescope), the dirty beam $B(l,m)$ generally has a narrow
+central peak-whose width sets the nominal angular resolution of the
+synthesised image, of order $1/b_\mathrm{max}$ radians for a maximum baseline
+$b_\mathrm{max}$ measured in wavelengths-surrounded by sidelobes that reflect
+the gaps in $uv$-coverage. For the compact, six-baseline east-west array of
+this thesis, the $uv$-coverage accumulated over an Earth-rotation transit
+consists of six partial elliptical arcs rather than a densely filled disk, so
+$B(l,m)$ retains significant sidelobe structure; this is expected, and the
+resulting dirty image is still a rigorously correct image of the sky under
+Eq.~\eqref{eq:dirty} given the actual sampling achieved-it is simply not a
+clean, sidelobe-free representation of $I(l,m)$. Because sidelobes are an
+unavoidable consequence of sparse $uv$-coverage rather than a simulation
+defect, Chapter~\ref{ch:results} evaluates the simulated dirty image not only
+by inspection but through the PSF shape itself, its dynamic range, and its
+main-lobe FWHM.
+
+Because the simulation in this thesis observes a single, compact, time-stable
+calibrator (the quiet-Sun disk) rather than attempting to image a complex
+field crowded with confusing sources, the dirty image and dirty beam together
+are sufficient to validate the instrument: demonstrating numerically that the
+simulated $I_\mathrm{D}$ equals the assumed input sky map convolved with the
+independently computed $B(l,m)$, as required by Eq.~\eqref{eq:dirty},
+constitutes the ultimate end-to-end mathematical verification of the entire
+signal-processing pipeline, from antenna voltages to final image, and is
+carried out explicitly in Chapter~\ref{ch:results}.
+
+% =====================================================================
+\section{Chapter Summary: Theoretical Chain Used by the Simulation}
+\label{sec:chapter-summary}
+Read as a whole, this chapter tells one story. The Sun produces radio
+emission (Section~\ref{sec:solar-activity}); the international community
+measures this emission as a flux density, in solar flux units
+(Section~\ref{sec:radioastro-quantities}); an antenna converts that flux
+density into received radio-frequency power, and a receiver converts that
+power into a voltage together with its own unavoidable noise
+(Sections~\ref{sec:flux-to-voltage}-\ref{sec:noise}); several antennas at
+known positions see the same signal with a small, geometry-dependent phase
+difference, and a correlator turns a pair of antenna voltages into a single
+complex visibility (Section~\ref{sec:voltage-to-visibility}); the array
+geometry places every visibility at its correct point in a Fourier $(u,v)$
+plane (Section~\ref{sec:uvw-coverage}); and an inverse Fourier transform of
+those points produces the dirty image analysed in Chapter~\ref{ch:results}
+(Section~\ref{sec:visibility-to-image}). Every equation in this chapter is a
+necessary step in that one chain, not an independent piece of theory.
+
+Not every equation plays the same role in the chain, and it is worth
+separating the two roles explicitly, as flagged throughout this chapter:
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Computational steps, evaluated directly by the simulation in
+        Chapter~\ref{ch:pipeline}:} the flux-to-SI conversion
+        (Eq.~\eqref{eq:sfu}) and interpolation to $S_\nu(t)$
+        (Section~\ref{subsec:sv-of-t}); the Friis relation and voltage
+        equivalent (Eqs.~\eqref{eq:friis}-\eqref{eq:vrms}); the Johnson-Nyquist
+        noise power and noise voltage (Eqs.~\eqref{eq:johnson}-\eqref{eq:noise-voltage});
+        the $\mathrm{ENU}\to XYZ\to uvw$ geometry (Eq.~\eqref{eq:uvw}); and
+        the direct Fourier inversion to the dirty image
+        (Eq.~\eqref{eq:dirty-ft}).
+  \item \textbf{Analytic benchmarks, used only afterwards to validate the
+        simulation in Chapter~\ref{ch:results}:} the fringe period
+        (Eq.~\eqref{eq:fringeperiod}); the van Cittert-Zernike relation and the
+        closed-form $\jinc$ visibility of a uniform disk
+        (Eqs.~\eqref{eq:vcz}-\eqref{eq:jinc}); and the convolution relation
+        between the dirty image, the true sky, and the synthesised beam
+        (Eqs.~\eqref{eq:dirty}-\eqref{eq:dirtybeam}).
+\end{itemize}
+This formalism, developed throughout in the notation of
+\citet{taylor1999synthesis}, provides both the modelling choices used to build
+the simulation and the analytic benchmarks used to check it, and it is this
+distinction-not merely the equations themselves-that the chapters that follow
+rely on.

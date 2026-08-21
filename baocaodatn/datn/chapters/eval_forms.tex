@@ -1,0 +1,282 @@
+% =====================================================================
+%  eval_forms.tex  —  HUST Graduation-Thesis evaluation forms (Vietnamese)
+%  Included from main.tex via \input{chapters/eval_forms}
+%
+%  This file is SELF-CONTAINED: it defines its own column types and a
+%  local row-helper so it does not depend on macro definitions elsewhere.
+%  It compiles with pdfLaTeX + [T5]{fontenc} (Vietnamese) and the packages
+%  already loaded in main.tex (tabularx, booktabs/array, multirow,
+%  xcolor[table], enumitem).  No siunitx / math is used here.
+%
+%  Student fields are read from the \student* macros defined in main.tex
+%  (\studentnameVN, \studentid, \thesistitle).  Edit those in main.tex.
+% =====================================================================
+
+% ---- Local column types (multipliers sum to 4 = number of X columns) -
+%  Column 1 (STT)     : narrow, centred
+%  Column 2 (Tiêu chí): medium,  left
+%  Column 3 (Hướng dẫn): wide,   left, justified
+%  Column 4 (Điểm)    : narrow, centred
+\newcolumntype{A}{>{\centering\arraybackslash\hsize=0.30\hsize}X}
+\newcolumntype{B}{>{\raggedright\arraybackslash\hsize=0.95\hsize}X}
+\newcolumntype{G}{>{\raggedright\arraybackslash\hsize=2.30\hsize}X}
+\newcolumntype{P}{>{\centering\arraybackslash\hsize=0.45\hsize}X}
+
+% ---- Local helpers ---------------------------------------------------
+% Body font for the three forms. If any single form spills one line past
+% its page on your machine, change \footnotesize -> \scriptsize here only.
+\newcommand{\evalheaderfont}{\footnotesize}
+% A grey header row for the four-column criteria tables:
+\newcommand{\evalcolhead}{%
+  \rowcolor{LightCyan}
+  \textbf{STT} & \textbf{Tiêu chí (Điểm tối đa)} &
+  \textbf{Hướng dẫn đánh giá tiêu chí} & \textbf{Điểm tiêu chí}\\
+}
+
+% =====================================================================
+%  These admin forms are front matter: keep them single-spaced and
+%  unnumbered, each on its own page, and excluded from the ToC.
+% =====================================================================
+\begingroup
+\singlespacing
+\setlength{\extrarowheight}{1pt}\setlength{\tabcolsep}{4pt}
+\evalheaderfont
+
+% =====================================================================
+%  FORM 1 — DÀNH CHO CÁN BỘ HƯỚNG DẪN
+% =====================================================================
+\thispagestyle{fancy}
+\begin{center}
+  {\bfseries ĐẠI HỌC BÁCH KHOA HÀ NỘI}\\[2pt]
+  {\bfseries TRƯỜNG ĐIỆN - ĐIỆN TỬ}\\[4pt]
+  {\large\bfseries ĐÁNH GIÁ ĐỒ ÁN TỐT NGHIỆP}\\[2pt]
+  {\bfseries (DÀNH CHO CÁN BỘ HƯỚNG DẪN)}
+\end{center}
+
+\vspace{3pt}
+\noindent\textbf{Tên đề tài:} \thesistitle
+
+\vspace{3pt}
+\noindent\textbf{Họ tên SV:} \studentnameVN \hfill \textbf{MSSV:} \studentid
+
+\vspace{2pt}
+\noindent Cán bộ hướng dẫn 1: \dotfill
+
+\vspace{2pt}
+\noindent Cán bộ hướng dẫn 2: \dotfill
+
+\vspace{3pt}
+\noindent
+\begin{tabularx}{\textwidth}{|A|B|G|P|}
+  \hline
+  \evalcolhead
+  \hline
+  \multirow{2}{=}{1}
+    & \multirow{2}{=}{\textbf{Thái độ làm việc} (2,5 điểm)}
+    & Nghiêm túc, tích cực và chủ động trong quá trình làm ĐATN & \\ \cline{3-4}
+    & & Hoàn thành đầy đủ và đúng tiến độ các nội dung được GVHD giao & \\ \hline
+  \multirow{2}{=}{2}
+    & \multirow{2}{=}{\textbf{Kỹ năng viết quyển ĐATN} (2 điểm)}
+    & Trình bày đúng mẫu quy định, bố cục các chương logic và hợp lý:
+      bảng biểu, hình ảnh rõ ràng, có tiêu đề, được đánh số thứ tự và được
+      giải thích hay đề cập đến trong đồ án, có căn lề, dấu cách sau dấu
+      chấm, dấu phẩy, có mở đầu chương và kết luận chương, có liệt kê tài
+      liệu tham khảo và có trích dẫn, v.v. & \\ \cline{3-4}
+    & & Kỹ năng diễn đạt, phân tích, giải thích, lập luận: cấu trúc câu rõ
+        ràng, văn phong khoa học, lập luận logic và có cơ sở, thuật ngữ
+        chuyên ngành phù hợp, v.v. & \\ \hline
+  \multirow{3}{=}{3}
+    & \multirow{3}{=}{\textbf{Nội dung và kết quả đạt được} (5 điểm)}
+    & Nêu rõ tính cấp thiết, ý nghĩa khoa học và thực tiễn của đề tài, các
+      vấn đề và các giả thuyết, phạm vi ứng dụng của đề tài. Thực hiện đầy
+      đủ quy trình nghiên cứu: đặt vấn đề, mục tiêu đề ra, phương pháp
+      nghiên cứu/giải quyết vấn đề, kết quả đạt được, đánh giá và kết luận. & \\ \cline{3-4}
+    & & Nội dung và kết quả được trình bày một cách logic và hợp lý, được
+        phân tích và đánh giá thỏa đáng. Biện luận phân tích kết quả mô
+        phỏng/phần mềm/thực nghiệm, so sánh kết quả đạt được với kết quả
+        trước đó có liên quan. & \\ \cline{3-4}
+    & & Chỉ rõ sự phù hợp giữa kết quả đạt được và mục tiêu ban đầu đề ra,
+        đồng thời cung cấp lập luận để đề xuất hướng giải quyết có thể thực
+        hiện trong tương lai. Hàm lượng khoa học/độ phức tạp cao, có tính
+        mới/tính sáng tạo trong nội dung và kết quả đồ án. & \\ \hline
+  \multirow{2}{=}{4}
+    & \multirow{2}{=}{\textbf{Điểm thành tích} (1 điểm)}
+    & Có bài báo KH được đăng hoặc chấp nhận đăng / đạt giải SV NCKH giải 3
+      cấp Trường trở lên / các giải thưởng khoa học trong nước, quốc tế từ
+      giải 3 trở lên / có đăng ký bằng phát minh sáng chế. (1 điểm) & \\ \cline{3-4}
+    & & Được báo cáo tại hội đồng cấp Trường trong hội nghị SV NCKH nhưng
+        không đạt giải từ giải 3 trở lên / đạt giải khuyến khích trong cuộc
+        thi khoa học trong nước, quốc tế / kết quả đồ án là sản phẩm ứng
+        dụng có tính hoàn thiện cao, yêu cầu khối lượng thực hiện lớn.
+        (0,5 điểm) & \\ \hline
+  \multicolumn{3}{|l|}{\textbf{Điểm tổng các tiêu chí:}} & \\ \hline
+  \multicolumn{3}{|l|}{\textbf{Điểm hướng dẫn:}} & \\ \hline
+\end{tabularx}
+
+\vspace{3pt}
+\hfill\begin{minipage}{6cm}\centering
+  \textbf{Cán bộ hướng dẫn}\\
+  (Ký và ghi rõ họ tên)
+\end{minipage}
+
+\vspace{2pt}\par\noindent\scriptsize\textit{Điểm từng tiêu chí cho lẻ đến 0,5. Nếu Điểm
+tổng các tiêu chí $>$ 10 thì Điểm hướng dẫn làm tròn thành 10.}
+\normalsize
+\clearpage
+
+% =====================================================================
+%  FORM 2 — DÀNH CHO CÁN BỘ THÀNH VIÊN HỘI ĐỒNG
+% =====================================================================
+\thispagestyle{fancy}
+\begin{center}
+  {\bfseries ĐẠI HỌC BÁCH KHOA HÀ NỘI}\\[2pt]
+  {\bfseries TRƯỜNG ĐIỆN - ĐIỆN TỬ}\\[4pt]
+  {\large\bfseries ĐÁNH GIÁ ĐỒ ÁN TỐT NGHIỆP}\\[2pt]
+  {\bfseries (DÀNH CHO CÁN BỘ THÀNH VIÊN HỘI ĐỒNG)}
+\end{center}
+
+\vspace{3pt}
+\noindent Hội đồng số: \dotfill
+
+\vspace{2pt}
+\noindent\textbf{Họ tên SV:} \studentnameVN \hfill \textbf{MSSV:} \studentid
+
+\vspace{2pt}
+\noindent Cán bộ thành viên HĐ: \dotfill
+
+\vspace{3pt}
+\noindent
+\begin{tabularx}{\textwidth}{|A|B|G|P|}
+  \hline
+  \evalcolhead
+  \hline
+  \multirow{2}{=}{1}
+    & \multirow{2}{=}{\textbf{Chất lượng slides/Bản vẽ kỹ thuật} (1,5 điểm)}
+    & Sử dụng các minh họa hỗ trợ: hình ảnh, biểu đồ rõ nét và phù hợp,
+      dễ hiểu & \\ \cline{3-4}
+    & & Không quá nhiều từ, biết sử dụng từ khoá; bố cục logic, có đánh số
+        trang & \\ \hline
+  \multirow{2}{=}{2}
+    & \multirow{2}{=}{\textbf{Kỹ năng thuyết trình} (1,5 điểm)}
+    & Tự tin, làm chủ nội dung trình bày, đúng thời gian quy định & \\ \cline{3-4}
+    & & Dễ hiểu, dễ theo dõi, lô-gic, lôi cuốn. & \\ \hline
+  \multirow{3}{=}{3}
+    & \multirow{3}{=}{\textbf{Nội dung và kết quả đạt được} (5 điểm)}
+    & Nêu rõ tính cấp thiết, ý nghĩa khoa học và thực tiễn của đề tài, các
+      vấn đề và các giả thuyết, phạm vi ứng dụng của đề tài. Thực hiện đầy
+      đủ quy trình nghiên cứu: đặt vấn đề, mục tiêu đề ra, phương pháp
+      nghiên cứu/giải quyết vấn đề, kết quả đạt được, đánh giá và kết luận. & \\ \cline{3-4}
+    & & Nội dung và kết quả được trình bày một cách logic và hợp lý, được
+        phân tích và đánh giá thỏa đáng. Biện luận phân tích kết quả mô
+        phỏng/phần mềm/thực nghiệm, so sánh kết quả đạt được với kết quả
+        trước đó có liên quan. & \\ \cline{3-4}
+    & & Chỉ rõ sự phù hợp giữa kết quả đạt được và mục tiêu ban đầu đề ra,
+        đồng thời cung cấp lập luận để đề xuất hướng giải quyết có thể thực
+        hiện trong tương lai. Hàm lượng khoa học/độ phức tạp cao, có tính
+        mới/tính sáng tạo trong nội dung và kết quả đồ án. & \\ \hline
+  \multirow{2}{=}{4}
+    & \multirow{2}{=}{\textbf{Trả lời câu hỏi} (2,5 điểm)}
+    & Trả lời ngắn gọn, chính xác, đi thẳng vào vấn đề của câu hỏi. & \\ \cline{3-4}
+    & & Nắm vững kiến thức cơ bản liên quan đến lĩnh vực nghiên cứu/công
+        việc của đồ án. & \\ \hline
+  \multirow{2}{=}{5}
+    & \multirow{2}{=}{\textbf{Điểm thành tích} (1 điểm)}
+    & Có bài báo KH được đăng hoặc chấp nhận đăng / đạt giải SV NCKH giải 3
+      cấp Trường trở lên / các giải thưởng khoa học trong nước, quốc tế từ
+      giải 3 trở lên / có đăng ký bằng phát minh sáng chế. (1 điểm) & \\ \cline{3-4}
+    & & Được báo cáo tại hội đồng cấp Trường trong hội nghị SV NCKH nhưng
+        không đạt giải từ giải 3 trở lên / đạt giải khuyến khích trong cuộc
+        thi khoa học trong nước, quốc tế / kết quả đồ án là sản phẩm ứng
+        dụng có tính hoàn thiện cao, yêu cầu khối lượng thực hiện lớn.
+        (0,5 điểm) & \\ \hline
+  \multicolumn{3}{|l|}{\textbf{Điểm tổng các tiêu chí:}} & \\ \hline
+  \multicolumn{3}{|l|}{\textbf{Điểm đánh giá:}} & \\ \hline
+\end{tabularx}
+
+\vspace{3pt}
+\hfill\begin{minipage}{6cm}\centering
+  \textbf{Cán bộ thành viên hội đồng}\\
+  (Ký và ghi rõ họ tên)
+\end{minipage}
+
+\vspace{2pt}\par\noindent\scriptsize\textit{Điểm từng tiêu chí cho lẻ đến 0,5. Nếu Điểm
+tổng các tiêu chí $>$ 10 thì Điểm đánh giá làm tròn thành 10.}
+\normalsize
+\clearpage
+
+% =====================================================================
+%  FORM 3 — DÀNH CHO CÁN BỘ PHẢN BIỆN
+% =====================================================================
+\thispagestyle{fancy}
+\begin{center}
+  {\bfseries ĐẠI HỌC BÁCH KHOA HÀ NỘI}\\[2pt]
+  {\bfseries TRƯỜNG ĐIỆN - ĐIỆN TỬ}\\[4pt]
+  {\large\bfseries ĐÁNH GIÁ ĐỒ ÁN TỐT NGHIỆP}\\[2pt]
+  {\bfseries (DÀNH CHO CÁN BỘ PHẢN BIỆN)}
+\end{center}
+
+\vspace{3pt}
+\noindent\textbf{Tên đề tài:} \thesistitle
+
+\vspace{3pt}
+\noindent\textbf{Họ tên SV:} \studentnameVN \hfill \textbf{MSSV:} \studentid
+
+\vspace{2pt}
+\noindent Cán bộ phản biện: \dotfill
+
+\vspace{3pt}
+\noindent
+\begin{tabularx}{\textwidth}{|A|B|G|P|}
+  \hline
+  \evalcolhead
+  \hline
+  \multirow{2}{=}{1}
+    & \multirow{2}{=}{\textbf{Trình bày quyển ĐATN} (4 điểm)}
+    & Đồ án trình bày đúng mẫu quy định, bố cục các chương logic và hợp lý:
+      bảng biểu, hình ảnh rõ ràng, có tiêu đề, được đánh số thứ tự và được
+      giải thích hay đề cập đến trong đồ án, có căn lề, dấu cách sau dấu
+      chấm, dấu phẩy, có mở đầu chương và kết luận chương, có liệt kê tài
+      liệu tham khảo và có trích dẫn, v.v. & \\ \cline{3-4}
+    & & Kỹ năng diễn đạt, phân tích, giải thích, lập luận: cấu trúc câu rõ
+        ràng, văn phong khoa học, lập luận logic và có cơ sở, thuật ngữ
+        chuyên ngành phù hợp, v.v. & \\ \hline
+  \multirow{3}{=}{2}
+    & \multirow{3}{=}{\textbf{Nội dung và kết quả đạt được} (5,5 điểm)}
+    & Nêu rõ tính cấp thiết, ý nghĩa khoa học và thực tiễn của đề tài, các
+      vấn đề và các giả thuyết, phạm vi ứng dụng của đề tài. Thực hiện đầy
+      đủ quy trình nghiên cứu: đặt vấn đề, mục tiêu đề ra, phương pháp
+      nghiên cứu/giải quyết vấn đề, kết quả đạt được, đánh giá và kết luận. & \\ \cline{3-4}
+    & & Nội dung và kết quả được trình bày một cách logic và hợp lý, được
+        phân tích và đánh giá thỏa đáng. Biện luận phân tích kết quả mô
+        phỏng/phần mềm/thực nghiệm, so sánh kết quả đạt được với kết quả
+        trước đó có liên quan. & \\ \cline{3-4}
+    & & Chỉ rõ sự phù hợp giữa kết quả đạt được và mục tiêu ban đầu đề ra,
+        đồng thời cung cấp lập luận để đề xuất hướng giải quyết có thể thực
+        hiện trong tương lai. Hàm lượng khoa học/độ phức tạp cao, có tính
+        mới/tính sáng tạo trong nội dung và kết quả đồ án. & \\ \hline
+  \multirow{2}{=}{3}
+    & \multirow{2}{=}{\textbf{Điểm thành tích} (1 điểm)}
+    & Có bài báo KH được đăng hoặc chấp nhận đăng / đạt giải SV NCKH giải 3
+      cấp Trường trở lên / các giải thưởng khoa học trong nước, quốc tế từ
+      giải 3 trở lên / có đăng ký bằng phát minh sáng chế. (1 điểm) & \\ \cline{3-4}
+    & & Được báo cáo tại hội đồng cấp Trường trong hội nghị SV NCKH nhưng
+        không đạt giải từ giải 3 trở lên / đạt giải khuyến khích trong cuộc
+        thi khoa học trong nước, quốc tế / kết quả đồ án là sản phẩm ứng
+        dụng có tính hoàn thiện cao, yêu cầu khối lượng thực hiện lớn.
+        (0,5 điểm) & \\ \hline
+  \multicolumn{3}{|l|}{\textbf{Điểm tổng các tiêu chí:}} & \\ \hline
+  \multicolumn{3}{|l|}{\textbf{Điểm phản biện:}} & \\ \hline
+\end{tabularx}
+
+\vspace{3pt}
+\hfill\begin{minipage}{6cm}\centering
+  \textbf{Cán bộ phản biện}\\
+  (Ký và ghi rõ họ tên)
+\end{minipage}
+
+\vspace{2pt}\par\noindent\scriptsize\textit{Điểm từng tiêu chí cho lẻ đến 0,5. Nếu Điểm
+tổng các tiêu chí $>$ 10 thì Điểm phản biện làm tròn thành 10.}
+\normalsize
+
+\endgroup
+\clearpage

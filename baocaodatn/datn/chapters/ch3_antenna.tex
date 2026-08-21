@@ -1,0 +1,1097 @@
+% =====================================================================
+%  CHAPTER 3 — ELECTROMAGNETIC MODELLING OF THE RECEIVING ELEMENT
+% =====================================================================
+%  Compilation notes (pdflatex / VS Code, LaTeX Workshop):
+%    Required packages (declare in your main preamble if not already):
+%      \usepackage{siunitx}            % \SI, \si, \ohm, \mega\hertz, ...
+%      \usepackage{booktabs}           % \toprule \midrule \bottomrule
+%      \usepackage{enumitem}           % [leftmargin=...]
+%      \usepackage{graphicx}           % \includegraphics
+%      \usepackage{float}              % [H] float placement
+%      \usepackage{amsmath,amssymb}    % equation, align, \mathrm, \approx
+%      \usepackage[round]{natbib}      % \citep / \citet  (or biblatex; see notes)
+%    Recommended siunitx setup (preamble):
+%      \sisetup{detect-all, per-mode=symbol}
+%    Bibliography keys used here (define them later in your .bib):
+%      balanis2016, kraus1988, stutzman2013, pozar2012, harrington1993,
+%      nec2, yagi1928, gupta1983, tms2017, mclean1985,
+%      wild1963, benz2005, christiansen1985, sws_rims_metadata, rstn_overview
+%  ---------------------------------------------------------------------
+%  Figure files expected in your graphics path (placeholders — replace):
+%      fig_yagi_geometry      fig_folded_dipole      fig_field_setup
+%      fig_nec_model          fig_pattern_eplane     fig_pattern_3d
+%      fig_coupling_curve     fig_primary_beam
+% =====================================================================
+
+\chapter{ELECTROMAGNETIC MODELLING OF THE RECEIVING ELEMENT}
+\label{ch:antenna}
+
+It is worth noting at the outset that low-cost interferometer projects such as
+DLITE (Chapter~\ref{ch:intro}) favour LWA-style crossed-dipole antennas, which
+are better suited to DLITE's much lower \SIrange{30}{40}{\mega\hertz} operating
+band; the Yagi-Uda antenna adopted here is not an untested substitute chosen
+for lack of an alternative. Yagi-class antennas have a long and independently
+documented track record as a low-cost, high-reliability receiving element,
+in amateur radio and in commercial UHF television reception alike
+\citep{yagi1928,balanis2016,kraus1988}, and this chapter goes on to show that
+the same combination of low cost and dependable performance carries over
+directly to the \SI{610}{\mega\hertz} solar case: the specific unit used in
+this thesis is validated below against three independent methods
+(Section~\ref{sec:single-element-validation}) and found to be well matched,
+with negligible mutual coupling at the operating baselines
+(Section~\ref{sec:coupling-rationale}).
+
+The accuracy of the entire interferometric simulation depends on having a
+reliable model of the receiving element, and this chapter builds that model
+as a chain of evidence rather than a survey of antenna theory: a real
+antenna is characterised for gain and beam shape, its impedance is checked
+for a stable match, and finally its behaviour when placed next to an
+identical neighbour is checked against the independent-sensor assumption
+that Chapter~\ref{ch:theory} relies on. Only once every link in that chain
+holds is the antenna model handed to the simulation pipeline of
+Chapter~\ref{ch:pipeline}. This thesis is, at its core, a study of an
+\emph{antenna system}: the solar radio burst is the observation target, but
+the main contribution is the careful characterisation of the receiving array
+and the demonstration that its electromagnetic behaviour supports the
+assumptions made in the signal-processing pipeline.
+
+% =====================================================================
+\section{Why the Receiving Element Must Be Modelled}
+\label{sec:why-model}
+
+In an aperture-synthesis array, the single-element radiation pattern is the
+primary beam of the instrument (Section~\ref{subsec:antenna-gain-beam}). It
+sets the field of view within which the Sun can be observed, and it controls
+how strongly off-axis terrestrial interference enters the measurement.
+Electromagnetic coupling between neighbouring elements also needs to be
+verified: if coupling is significant, the array cannot be treated as a set
+of independent sensors-the core assumption of the van~Cittert-Zernike
+imaging framework developed in Chapter~\ref{ch:theory}-and a more complex
+calibration would be required. Concretely, before any solar data can be
+trusted, this chapter must answer four questions about the physical antenna:
+\begin{enumerate}[leftmargin=1.8em]
+  \item \textbf{Reception:} does the antenna actually receive a usable
+        signal at \SI{610}{\mega\hertz}?
+  \item \textbf{Beam:} what is its real radiation pattern, so that the
+        correct primary beam-not an idealised Gaussian-can be used in the
+        simulation?
+  \item \textbf{Matching:} is its impedance stable and well matched enough
+        that the received power computed by the Friis relation
+        (Eq.~\eqref{eq:friis}) is a physically meaningful quantity, rather
+        than being dominated by reflected power lost back down the feed?
+  \item \textbf{Independence:} when several such antennas are placed close
+        together to form an array, does mutual coupling break the
+        independent-sensor assumption on which the imaging theory of
+        Chapter~\ref{ch:theory} depends?
+\end{enumerate}
+The remainder of this chapter answers these four questions in order, in one
+continuous chain: the receiving element is introduced and shown to be
+suitable in principle (Sections~\ref{sec:yagi-selection}-\ref{sec:matching});
+it is placed against a professional reference system and a field trial to
+motivate why a controlled model is necessary at all
+(Section~\ref{sec:reference-systems}); it is then modelled numerically
+(Section~\ref{sec:simulation}) and validated against direct measurement
+(Section~\ref{sec:single-element-validation}); its behaviour as an array
+element is checked against the independent-sensor assumption
+(Section~\ref{sec:coupling-rationale}); and finally its measured beam is
+exported in the form actually consumed by the simulation
+(Section~\ref{sec:primary-beam-extraction}).
+
+% =====================================================================
+\section{Yagi-Uda Antenna as the Selected Low-Cost Receiving Element}
+\label{sec:yagi-selection}
+
+The Yagi-Uda antenna remains one of the most widely used directional antennas
+in the Ultra-High-Frequency (UHF) band. First described in the English-language
+literature by \citet{yagi1928}, building on the work of Shintaro Uda, the design
+achieves an attractive balance between high directivity, mechanical robustness,
+and very low fabrication cost \citep{balanis2016,kraus1988}. These properties
+are precisely what a low-budget, educational solar radio instrument requires,
+and they are the reason a commercial Yagi forms the receiving element of this
+project.
+
+% ---------------------------------------------------------------------
+\subsection{Operating Principle and Parasitic Excitation}
+\label{subsec:parasitic}
+
+Unlike a phased array, in which every element is fed with an individually
+controlled voltage and phase, the Yagi-Uda array operates by
+\emph{parasitic excitation}: it comprises a single active \emph{driven
+element} together with several passive (parasitic) elements whose currents
+are induced purely by electromagnetic coupling with their neighbours. This
+is the same physical mechanism, generalised to many elements, that reappears
+in Section~\ref{sec:coupling-rationale} between two separate antennas of the
+array: a current flowing on one conductor induces a voltage on every nearby
+conductor, and the strength of that induced voltage, for a given current, is
+called the \emph{mutual impedance}.
+
+For an array of $N+1$ elements, indexing the reflector as $-1$, the driven
+element as $0$, and the directors as $1,2,\dots,N$, the terminal voltage on
+element $m$ is the sum of the voltage its own current would produce if it
+were isolated, plus the voltage induced on it by the current on every other
+element:
+\begin{equation}
+    V_m = \sum_{n} Z_{mn}\, I_n ,
+    \label{eq:mutual-matrix}
+\end{equation}
+where:
+\begin{itemize}[leftmargin=1.5em,itemsep=1pt,topsep=2pt]
+  \item $V_m$ is the terminal voltage of element $m$-the voltage that would
+        be measured across its (real or virtual) feed gap;
+  \item $I_n$ is the current on element $n$;
+  \item $Z_{mn}$, for $m\neq n$, is the \emph{mutual impedance} between
+        elements $m$ and $n$-the voltage induced on element $m$ per unit
+        current on element $n$;
+  \item $Z_{mm}$ is the \emph{self-impedance} of element $m$-the impedance
+        it would present if every other element carried zero current
+        \citep{balanis2016}.
+\end{itemize}
+Only the driven element is fed, so $V_0\neq 0$ while every parasitic element is
+short-circuited at its (virtual) terminals:
+\begin{equation}
+    0 = \sum_{n} Z_{kn}\, I_n \qquad (k \neq 0).
+    \label{eq:parasitic-zero}
+\end{equation}
+Equation~\eqref{eq:parasitic-zero} \citep{balanis2016,kraus1988} shows that the parasitic currents are not
+free parameters: they are fixed by the geometry through the off-diagonal mutual
+impedances. The design freedom available to the engineer is therefore the
+choice of element lengths and spacings, which set the magnitude and-crucially
+-the \emph{phase} of each induced current.
+
+The directional behaviour follows directly from these induced phases
+\citep{kraus1988,stutzman2013}:
+\begin{itemize}[leftmargin=1.6em]
+    \item \textbf{Reflector.} Positioned behind the driven element and made
+    slightly longer than the resonant half-wavelength ($\approx\!5\%$ longer),
+    the reflector presents an \emph{inductive} reactance. The induced current
+    consequently lags the driving field, and the superposition of the
+    re-radiated field with the primary field is constructive toward the front
+    and destructive toward the rear. A single reflector captures most of the
+    available rearward suppression; additional reflectors yield diminishing
+    returns, which is why practical Yagis use one reflector (or, as here, one
+    reflecting structure) but many directors.
+    \item \textbf{Directors.} Positioned in front of the driven element and made
+    $\approx\!5\%$ \emph{shorter} than resonance, the directors are
+    \emph{capacitive}. Their induced currents lead the driving field, so the
+    composite wave is progressively guided forward, sharpening the main lobe
+    into an end-fire beam along the boom axis \citep{balanis2016}.
+\end{itemize}
+The net effect is a travelling-wave-like structure that concentrates radiated
+(or, by reciprocity, received) power along the boom.
+
+% ---------------------------------------------------------------------
+\subsection{Directivity Build-Up and the Gain-Bandwidth Trade-off}
+\label{subsec:directivity}
+
+The directivity of a Yagi-Uda array increases monotonically, though
+sub-linearly, with the number of directors. A useful qualitative progression,
+consistent with both classical treatments and the present design, is that an
+isolated half-wave dipole provides about \SI{2.15}{dBi}; adding a reflector
+raises this to roughly \SI{7}{dBi}; the first director takes it close to
+\SI{9.7}{dBi}; and a well-tuned six-director structure of the type used here
+reaches the \SIrange{9.5}{13}{dBi} range depending on boom length and tuning
+\citep{balanis2016,stutzman2013}. Each added director narrows the main lobe,
+which improves angular resolution and-important for a ground-based solar
+instrument-reduces the half-power beamwidth through which horizon-level
+terrestrial interference can enter.
+
+This gain, however, comes at the cost of bandwidth and tuning sensitivity. As
+more directors are added, the array impedance becomes more reactive and the
+input match deteriorates away from the design frequency. Pushing for too much
+gain can reduce the usable bandwidth and even lower the peak gain by several
+decibels if the element phasing moves away from the optimum \citep{stutzman2013}. For the solar application this trade-off is benign: the
+instantaneous observing bandwidth is narrow (a single \SI{1}{\mega\hertz}
+channel centred at \SI{610}{\mega\hertz}), so a moderately high-gain,
+moderately broadband design is entirely appropriate, and the bandwidth inherited
+from the original DVB-T2 service is far wider than the observation requires.
+
+% ---------------------------------------------------------------------
+\subsection{The Selected Physical Antenna: HKD~G11KD-T2}
+\label{subsec:hkd-spec}
+
+The physical receiving element adopted for this project is the commercial
+HKD~G11KD-T2, a high-gain UHF Yagi-Uda antenna originally marketed for DVB-T2
+digital-television reception. As a commercial-off-the-shelf (COTS) component it
+combines mature RF engineering with rugged, weather-resistant aluminium
+construction, and it is available at a small fraction of the cost of a
+purpose-built radio-astronomy feed-the same low-element-cost argument
+developed for the LWA-style antennas of DLITE in Chapter~\ref{ch:intro}.
+
+Because the manufacturer publishes only marketing specifications, the geometry
+used for simulation was established by reconciling three independent sources:
+the manufacturer drawing, photographs of the deployed unit
+(Figure~\ref{fig:hkd-photo}), and direct physical measurement of the antenna
+with callipers. The resulting model, summarised in Table~\ref{tab:hkd-geom},
+comprises an eleven-element structure on an aluminium boom of overall length
+$\approx\!\SI{550}{\milli\metre}$. This same geometry is the input to the
+4NEC2 antenna simulation software described in Section~\ref{sec:simulation}.
+
+\begin{table}[H]
+  \centering
+  \caption[HKD G11KD-T2 antenna geometry used as electromagnetic model basis]{HKD G11KD-T2 antenna geometry used as electromagnetic model basis.\\[4pt]
+           Dimensions were established by reconciling the manufacturer drawing,
+           photographs of the deployed unit at the Xuan~Mai test site, and direct
+           calliper measurements. The eleven-element Yagi sits on an aluminium
+           boom of overall length approximately 550~mm; spacings are measured
+           along the boom from the driven element (director~1 is the element
+           closest to the feed).}
+  \label{tab:hkd-geom}
+  \renewcommand{\arraystretch}{1.25}
+  \begin{tabularx}{\textwidth}{l >{\raggedright\arraybackslash}X}
+    \toprule
+    \textbf{Element} & \textbf{Dimension} \\
+    \midrule
+    Reflector (four-bar U-frame) & outer bars at $z=\pm\SI{40}{\milli\metre}$, inner bars at $z=\pm\SI{10}{\milli\metre}$ \\
+    Driven element (folded dipole) & length $\approx\SI{210}{\milli\metre}$, fold height $\SI{44}{\milli\metre}$ \\
+    Director lengths               & $\approx\SI{210}{\milli\metre}$ (each) \\
+    Director spacings              & $82,\,40,\,50,\,50,\,66,\,69~\si{\milli\metre}$ \\
+    Boom (square profile)          & $15\times15~\si{\milli\metre}$, length $\approx\SI{550}{\milli\metre}$ \\
+    Element material               & aluminium (hollow tube / solid rod) \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{photo_hkd_antenna}
+  \caption[Physical HKD~G11KD-T2 Yagi-Uda antenna unit]{Physical HKD~G11KD-T2 Yagi-Uda antenna unit.\\[4pt]
+  The eleven-element structure is shown with the four-bar U-frame reflector at the
+  rear and the sequence of directors extending forward along the aluminium boom.
+  The folded-dipole driven element sits immediately in front of the reflector frame;
+  the mast-head LNA mounts directly at the feed terminals behind the driven element.
+  Calliper measurements of this unit provided the dimensional inputs for
+  Table~\ref{tab:hkd-geom}.}
+  \label{fig:hkd-photo}
+\end{figure}
+
+The four-bar U-frame reflector is the distinguishing geometric feature of this
+antenna. Rather than a single straight rod, the reflector forms a shallow
+three-dimensional frame: this widens the effective reflecting aperture, raises
+the front-to-back ratio, and in the radio-astronomy context suppresses pickup of
+warm-ground thermal noise entering through the rear lobe.
+
+% ---------------------------------------------------------------------
+\subsection{Suitability for \texorpdfstring{\SI{610}{\mega\hertz}}{610 MHz}
+Solar Observation}
+\label{subsec:suitability}
+
+At \SI{610}{\mega\hertz} the free-space wavelength is
+\begin{equation}
+    \lambda = \frac{c}{f} = \frac{2.998\times10^{8}\,\si{\metre\per\second}}
+                                 {610\times10^{6}\,\si{\hertz}}
+            \approx \SI{491.5}{\milli\metre},
+    \label{eq:wavelength}
+\end{equation}
+so a multi-element Yagi remains physically compact (boom length of order one
+metre) and can be hand-built and tripod-mounted-a decisive advantage for a
+low-cost, portable instrument \citep{balanis2016}. The Sun is a weak source at
+this frequency during quiet conditions (Chapter~\ref{ch:theory}), and any
+target burst must be separated from a strong terrestrial noise background. A
+directional element with moderate gain ($\sim\!\SI{9.5}{dBi}$) and a high
+front-to-back ratio is therefore valuable: it concentrates sensitivity toward
+the solar transit path while suppressing pickup from the horizon and from
+behind the array \citep{tms2017}.
+
+There is, however, an important double-edged aspect to using a
+commercial DVB-T2 antenna for this purpose, and it is worth stating explicitly
+because it shapes the field results in Section~\ref{sec:reference-systems}. The very
+features that make the antenna attractive-that it is mass-produced, inexpensive,
+and resonant across the \SIrange{470}{862}{\mega\hertz} UHF television band-
+also make it maximally sensitive to terrestrial digital-television broadcasts
+that occupy exactly that band. In a populated area the \SI{610}{\mega\hertz}
+observing channel sits in the middle of an active broadcast allocation, so the
+antenna efficiently collects precisely the interference one most wishes to
+avoid. This tension between availability and radio-frequency cleanliness is a
+recurring theme of the field campaign and one of the principal motivations for
+retreating to a controlled numerical model.
+
+% =====================================================================
+\section{Impedance, Folded Dipole, and 75-\texorpdfstring{$\Omega$}{Ohm} Feed Matching}
+\label{sec:matching}
+
+Before the antenna can be simulated or measured, it is worth being precise
+about which impedance is which, because three different quantities appear in
+this chapter and they are easy to conflate.
+\begin{itemize}[leftmargin=1.5em,itemsep=1pt,topsep=2pt]
+  \item $Z_d$ is the input impedance (equivalently, the radiation resistance)
+        of a single, isolated half-wave dipole under idealised free-space
+        conditions. The commonly used approximate value is
+        $Z_d\approx\SI{73}{\ohm}$.
+  \item $Z_f$ is the input impedance of a \emph{folded} dipole: two closely
+        spaced parallel conductors joined at both ends, fed by breaking only
+        one conductor at its centre.
+  \item $Z_\mathrm{in}$ is the actual input impedance measured, or simulated,
+        at the physical feed port of the \emph{complete} antenna-after the
+        reflector, all six directors, and their mutual loading are included.
+        $Z_\mathrm{in}$ is not the same quantity as $Z_f$, and it is
+        $Z_\mathrm{in}$, not $Z_f$, that is reported for the real element in
+        Section~\ref{sec:single-element-validation}.
+\end{itemize}
+
+A standard half-wave dipole presents a radiation resistance near $Z_d\approx
+\SI{73}{\ohm}$ in isolation, but this value drops substantially once the
+element is loaded by closely spaced parasitic directors, often falling well
+below \SI{30}{\ohm}. Such a low, geometry-sensitive impedance is difficult to
+match robustly over a useful band. The receiving element of this project
+therefore uses a folded dipole as its driven element, a choice that is
+standard in commercial UHF television antennas for exactly this reason
+\citep{kraus1988}.
+
+Because the radiating current of a folded dipole is shared between its two
+parallel conductors, the current at the feed terminals for the same radiated
+power is halved compared to a simple dipole, and, since impedance is voltage
+over current, halving the current for the same power raises the impedance by
+a factor of four. This gives the approximate relation
+\begin{equation}
+    Z_f \;\approx\; 4\,Z_d \;\approx\; 4 \times 73\,\si{\ohm}
+    \;\approx\; 292\,\si{\ohm}.
+    \label{eq:folded-dipole}
+\end{equation}
+Equation~\eqref{eq:folded-dipole} \citep{balanis2016,kraus1988} is only an
+approximation: it holds for two parallel conductors of equal radius, with a
+small spacing relative to a wavelength, in a balanced configuration, and
+\emph{before} the strong loading introduced by a reflector and multiple
+directors is taken into account. It is a design-level estimate of the folded
+dipole \emph{on its own}, not the final impedance measured at the antenna
+port once the complete Yagi structure is assembled; that final value, which
+does include the director and reflector loading, is $Z_\mathrm{in}$, reported
+in Section~\ref{sec:single-element-validation}.
+
+Two practical advantages follow from the estimate of Eq.~\eqref{eq:folded-dipole}
+nonetheless. First, the resulting impedance ($\sim\!\SI{300}{\ohm}$) is high
+enough that the parasitic loading of the directors brings it down into a
+convenient range rather than collapsing it toward zero, giving a more stable,
+broadband match. Second, the $\sim\!\SI{300}{\ohm}$ balanced impedance is
+transformed to the standard \SI{75}{\ohm} unbalanced coaxial feed by a simple
+$4{:}1$ balun, which simultaneously suppresses common-mode currents on the
+outer conductor of the cable. The combination of a folded dipole, a $4{:}1$
+balun, and a \SI{75}{\ohm} feed is the canonical UHF-television front end,
+and it is inherited unchanged by the present instrument. This is also why
+\SI{75}{\ohm} is used as the reference impedance $Z_0$ throughout this
+chapter, in the reflection-coefficient and SWR relations of
+Eq.~\eqref{eq:swr}: the antenna is a \SI{75}{\ohm} DVB-T2 device, the
+mast-head LNA is a \SI{75}{\ohm} part, and the entire feed is \SI{75}{\ohm}
+coaxial cable, so \SI{75}{\ohm} is the impedance against which return loss
+and SWR are physically meaningful for this system, both in simulation
+(Section~\ref{sec:simulation}) and in the NanoVNA measurement
+(Section~\ref{sec:single-element-validation}).
+
+% =====================================================================
+\section{Reference Observing System: Learmonth/RSTN and the Xuan~Mai Field Setup}
+\label{sec:reference-systems}
+
+The \SI{610}{\mega\hertz} flux record used throughout this thesis
+(Chapter~\ref{ch:theory}, Section~\ref{subsec:sv-of-t}) is not produced by the
+antenna characterised in this chapter; it comes from a separate, professional
+observing system at Learmonth. Before describing the field hardware built for
+this project, it is worth being precise about what that reference system
+actually is and, just as importantly, what its public documentation does and
+does not specify.
+
+% ---------------------------------------------------------------------
+\subsection{The Learmonth/RSTN Reference System}
+\label{subsec:learmonth-hardware}
+
+Learmonth Solar Observatory, in Western Australia, is one of the stations of
+the Radio Solar Telescope Network (RSTN), a network of ground-based solar
+radio patrol stations originally established by the U.S. Air Force Research
+Laboratory in the 1960s, with official solar patrols beginning in
+1966~\citep{rstn_overview}. Each RSTN station produces two distinct kinds of
+data: discrete-frequency total-power measurements from a
+\emph{Radio Interference Monitoring Set} (RIMS), and wideband spectral data
+from a separate \emph{Solar Radio Spectrograph} (SRS) covering the metre and
+decametre range~\citep{rstn_overview}. The Learmonth RIMS instrument monitors
+the Sun continuously on eight discrete frequencies-245, 410, 610, 1415, 2695,
+4995, 8800, and \SI{15400}{\mega\hertz}-using three parabolic dish antennas
+of different sizes: the largest, \SI{8.5}{\metre} (28~ft) in diameter, feeds
+the \SI{245}{}, \SI{410}{}, and \SI{610}{\mega\hertz} channels used in this
+thesis; a \SI{2.4}{\metre} (8~ft) dish covers 1415-\SI{8800}{\mega\hertz}; and
+a \SI{1}{\metre} (3~ft) dish covers \SI{15400}{\mega\hertz}~\citep{sws_rims_metadata}.
+Each channel's radiometer output is digitised at a \SI{1}{\hertz} sampling
+rate and transferred to the Sydney World Data Centre for processing and
+archival~\citep{sws_rims_metadata}. The RIMS one-second data record, at each
+monitored frequency, "the total power output in SFU\ldots the total raw power
+received by the RIMS"~\citep{rstn_overview}: it is a calibrated, single-channel
+total-power measurement, not a raw voltage or IQ stream, and daily Noon Flux
+values are additionally tagged with a quality qualifier (good; weather
+attenuated; interference; unknown; burst) that flags questionable
+data~\citep{rstn_overview}.
+
+This description supports the way Learmonth data are used in this thesis, but
+it also marks the limit of what can be claimed. The publicly available
+Learmonth/RSTN documentation establishes the antenna, the frequency plan, the
+sampling rate, and the fact that the reported quantity is total power in
+solar flux units; it does not publish the detailed analogue front-end or IF
+filter response of the \SI{610}{\mega\hertz} channel. Accordingly, this
+thesis makes no claim about the exact receiver bandwidth or filter shape used
+at Learmonth: the public metadata identifies the channel as a
+discrete-frequency RIMS measurement, but does not specify the detailed RF/IF
+filter response~\citep{sws_rims_metadata,rstn_overview}. The archived
+$S_\nu(t)$ record is therefore used, correctly, as an external, already-calibrated
+flux input (Section~\ref{subsec:sv-of-t}), and no attempt is made in this
+thesis to reproduce the Learmonth receiver chain itself.
+
+% ---------------------------------------------------------------------
+\subsection{Preliminary Field Deployment at Xuan~Mai}
+\label{subsec:field}
+
+To test whether solar radio observation was feasible with this hardware, a
+preliminary two-element interferometer was deployed at the Citrus Research and
+Development Centre in Xuan~Mai, Chuong~My, Hanoi, over several sessions in
+December~2025. Two identical HKD~G11KD-T2 antennas were mounted on heavy-duty
+photographic tripods and separated along an approximately east-west baseline of
+$\sim\!\SI{8}{\metre}$ (Figure~\ref{fig:xuan-mai-field}). The tripods allowed
+manual azimuth and elevation adjustment to follow the solar transit. Each
+antenna was fitted with a mast-head Low-Noise Amplifier (LNA) powered through a
+custom dual-channel bias-tee, which injected DC voltage up the coaxial cable
+while passing the \SI{610}{\mega\hertz} RF signal to the receiver. The back-end
+electronics consisted of an SDRplay~RSPdx-R2 software-defined radio receiver
+controlled by a Raspberry~Pi~4 single-board computer. All components were housed
+in a weatherproof enclosure with a \SI{12.6}{\volt} battery pack for autonomous
+field operation (Figure~\ref{fig:receiver-node}).
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{photo_xuan_mai_field}
+  \caption[Two-element interferometer field deployment at Xuan~Mai (December 2025)]{Two-element interferometer field deployment at Xuan~Mai (December 2025).\\[4pt]
+  Two HKD~G11KD-T2 antennas mounted on heavy-duty photographic tripods and
+  separated along an approximately east-west baseline of $\sim\!\SI{8}{\metre}$
+  at the Citrus Research and Development Centre, Chuong~My, Hanoi. Each element
+  is equipped with a mast-head LNA powered through a custom bias-tee; the
+  \SI{610}{\mega\hertz} signal is routed via coaxial cable to the
+  SDRplay~RSPdx-R2 receiver at the processing node. Manual azimuth and
+  elevation adjustment allowed the beams to track the solar transit.}
+  \label{fig:xuan-mai-field}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{photo_receiver_node}
+  \caption[Receiver and processing node: interior view of the field deployment enclosure]{Receiver and processing node: interior view of the field deployment enclosure.\\[4pt]
+  Top-down view of the weatherproof enclosure housing all back-end electronics.
+  The SDRplay~RSPdx-R2 software-defined radio receiver (centre) digitises the
+  \SI{610}{\mega\hertz} signal arriving via the \textbf{RF~in} port through a
+  dual-channel bias-tee that simultaneously injects \SI{12}{\volt} DC up the
+  coaxial feed to power the mast-head LNAs. A Raspberry~Pi~4 single-board
+  computer runs the data-acquisition software and writes recorded IQ streams to
+  a \SI{1}{\tera\byte} HDD. A \SI{12.6}{\volt} lithium battery pack with a
+  5\,V buck converter provides autonomous field power; a \SI{12}{\volt} fan
+  maintains thermal margin inside the sealed enclosure.}
+  \label{fig:receiver-node}
+\end{figure}
+
+The campaign confirmed that the instrument concept was sound in principle-the
+data showed a broad diurnal rise consistent with the Sun transiting the antenna
+beams-but it also exposed a series of operational failures that prevented any
+reliable detection of a genuine solar radio burst. Table~\ref{tab:learmonth-vs-xuanmai}
+summarises how this local, uncalibrated test setup compares with the
+professional Learmonth/RSTN reference system just described.
+
+\begin{table}[H]
+  \centering
+  \caption[Learmonth/RSTN reference system versus the Xuan~Mai field setup]{Learmonth/RSTN reference system versus the Xuan~Mai field setup.}
+  \label{tab:learmonth-vs-xuanmai}
+  \renewcommand{\arraystretch}{1.3}
+  \begin{tabularx}{\textwidth}{l >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}X}
+    \toprule
+    \textbf{Aspect} & \textbf{Learmonth/RSTN (reference)} & \textbf{Xuan~Mai (this thesis)} \\
+    \midrule
+    Antenna & \SI{8.5}{\metre} parabolic dish (245/410/\SI{610}{\mega\hertz} group) & Two HKD~G11KD-T2 Yagi-Uda elements, $\sim\!\SI{9.5}{dBi}$ each \\
+    Receiver & RIMS radiometer, calibrated, professionally maintained & SDRplay~RSPdx-R2 SDR with mast-head LNA, consumer-grade \\
+    Reported quantity & Total power, calibrated to solar flux units, \SI{1}{\hertz} & Raw complex (IQ) voltage stream, uncalibrated \\
+    Timing/phase reference & Not applicable (total-power radiometer, not an interferometer) & Independent receiver oscillators, no shared clock \\
+    Data quality control & IFLUX qualifier flags (good / weather / interference / unknown / burst) & None automated; RFI, cable loss, and hardware faults diagnosed post-hoc (Section~\ref{subsec:element-vs-system}) \\
+    Role in this thesis & Source of the real flux input $S_\nu(t)$ (Chapter~\ref{ch:theory}) & Motivates the need for a controlled antenna model (this chapter) \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+The relationship between the three systems introduced so far can be summarised
+in one sentence: \emph{Learmonth validates the solar input; Xuan~Mai motivates
+the hardware model; the 4NEC2 antenna simulator bridges the two by providing a
+controlled antenna response and coupling estimate.}
+
+% ---------------------------------------------------------------------
+\subsection{Element Versus System: Diagnosing the Field Failure}
+\label{subsec:element-vs-system}
+
+The most important outcome of the field campaign, for the purposes of this
+thesis, is a clean separation between the performance of the receiving
+\emph{element} and the performance of the receiving \emph{system}. The element
+was not at fault; the system was. The evidence is as follows.
+
+\paragraph{The element is validated.} During troubleshooting, the antennas and their
+LNAs were characterised directly at the feed point with a vector network
+analyser (NanoVNA). Each element returned a return loss
+$S_{11}\approx\SI{-12.8}{dB}$ and a voltage standing-wave ratio
+$\mathrm{VSWR}\approx1.59$ at \SI{610}{\mega\hertz}, and the LNAs delivered their
+rated gain. These figures indicate a well-matched, correctly functioning
+receiving element. The radiating hardware, in other words, met its specification-answering
+question~1 of Section~\ref{sec:why-model} in the affirmative.
+
+\paragraph{The system was degraded at the physical layer.} The failures lay in
+the chain between the antenna terminals and the digitiser:
+\begin{enumerate}[leftmargin=1.8em]
+    \item \textbf{Cable insertion loss.} Transmission-coefficient ($S_{21}$)
+    measurements of the coaxial runs alone showed
+    \SIrange{-3.1}{-3.5}{dB} of loss. More than half of the received power was
+    therefore dissipated in the feed before reaching the receiver-fatal for a
+    source already close to the noise floor.
+    \item \textbf{Bias-tee / LNA fault.} One mast-head LNA lost power through a
+    disconnection in its bias-tee channel, leaving that arm of the
+    interferometer effectively dead during part of the campaign.
+    \item \textbf{Terrestrial RFI and ground noise.} The outdoor noise floor was
+    densely populated with carriers from nearby electronic equipment and
+    broadcast services. As anticipated in Section~\ref{subsec:suitability}, the
+    DVB-T2 antenna's in-band sensitivity made this interference unavoidable, and
+    the recorded dynamic spectra showed strong, non-solar fringe-like structure
+    and night-time oscillations driven by local sources.
+    \item \textbf{Short, ill-defined baseline and weak source.} The achievable
+    physical baseline ($\sim\!\SI{8}{\metre}$ in the field) and the faintness of
+    the quiet-Sun signal ($\sim\!0.5~\si{dB}$ excursions above the receiver noise floor) left little margin
+    against the degradations above.
+    \item \textbf{Absence of phase coherence between receiver chains.} The
+    two RTL-SDR dongles each had an independent \SI{28.8}{\mega\hertz} crystal
+    oscillator with no shared reference. This caused a random, time-varying
+    phase error $\phi_{\rm err}(t)$ between the two arms. When the
+    cross-product $V_1 \cdot V_2^*$ was averaged over time, this random phase
+    swept across $[0,2\pi]$ and drove the fringe amplitude toward zero — a
+    phenomenon known as \emph{fringe washing} \citep{tms2017}. Without a
+    shared reference clock or phase calibration on a known source, fringes
+    cannot be recovered no matter how strong the solar signal is. This is the
+    most fundamental barrier to interferometry with independent receivers.
+\end{enumerate}
+
+\paragraph{Results:} The element is confirmed to work correctly, while the
+system was degraded by interference, cable loss, and — as discussed in
+Chapter~\ref{ch:results} — the lack of phase coherence between two independent
+receiver chains. Given this, the right approach is not to keep rebuilding the
+field array by trial and error. Instead, the antenna is characterised on its own
+in a controlled numerical environment where the geometry is known to the
+millimetre and where cabling, interference, and fabrication tolerances do not
+apply. A rigorous electromagnetic model provides the true primary beam and the
+coupling values that the field experiment could not supply directly. It also
+provides the clean, idealised receiving model on which the rest of the
+simulation depends. The remainder of this chapter builds and validates that
+model.
+
+% =====================================================================
+\section{4NEC2 Antenna Simulation Methodology}
+\label{sec:simulation}
+
+To obtain precise electromagnetic parameters free of the field's confounding
+variables, the U-frame folded-dipole Yagi was modelled in 4NEC2: a free antenna
+simulation software package that provides a graphical implementation of the
+Numerical Electromagnetics Code (NEC), based on the Method of Moments
+\citep{nec2}. In the rest of this chapter it is referred to, interchangeably,
+as the 4NEC2 antenna simulator or the 4NEC2 Method-of-Moments antenna model.
+
+% ---------------------------------------------------------------------
+\subsection{The Method of Moments}
+\label{subsec:mom}
+
+The 4NEC2 antenna simulator solves the thin-wire Electric-Field Integral
+Equation (EFIE) by the Method of Moments (MoM) \citep{harrington1993,nec2}. The
+continuous antenna is discretised into short, straight wire segments; the unknown
+current distribution is expanded in basis functions on these segments; and
+enforcement of the boundary condition that the total tangential electric field
+vanish on the conducting surface converts the integral equation into a dense
+linear system $[\,Z\,]\,[\,I\,] = [\,V\,]$, where $[\,Z\,]$ is the generalised
+impedance matrix, $[\,V\,]$ the excitation, and $[\,I\,]$ the segment currents
+to be solved. Accurate results require each segment to be short compared with
+the wavelength, typically between $\lambda/10$ and $\lambda/20$, and the
+segment radius to satisfy the thin-wire approximation. Once the current
+distribution is known, the input impedance follows from the feed-segment voltage
+and current, and the far-field pattern from the radiation integral over all
+segments. This NEC wire-model simulation is exceptionally well suited to open
+wire structures such as a Yagi-Uda array: it discretises only the conductors
+(not the surrounding volume), converges rapidly, and yields impedance and
+pattern data of high accuracy in the UHF band.
+
+% ---------------------------------------------------------------------
+\subsection{Wire Model Construction}
+\label{subsec:model}
+
+The HKD geometry of Table~\ref{tab:hkd-geom} was translated into a
+fourteen-wire NEC model for the 4NEC2 antenna simulator: the four U-frame
+reflector bars, the folded-dipole driven element (modelled as its constituent
+wires), and the six directors, with conductor radii in the
+\SIrange{2.0}{3.5}{\milli\metre} range to match the physical tubing
+(Figure~\ref{fig:4nec2-model}). The model was solved in free space (ground flag
+$\texttt{GN}\,{-}1$); this is the physically correct choice for a
+sky-pointing radio-astronomy antenna, whose intrinsic pattern is the quantity
+required, with the effect of the real ground treated separately rather than
+baked into the element pattern. The excitation was a \SI{1}{\volt} source
+placed at the centre of the folded dipole (the central segment of the
+driven-element wire), i.e.\ at the physical feed point, and, as established
+in Section~\ref{sec:matching}, the impedance reference throughout the model
+was set to \SI{75}{\ohm}, matching the antenna, LNA, and coaxial feed used in
+the field.
+
+Table~\ref{tab:hkd-geom} gives the physical dimensions in engineering terms;
+Figure~\ref{fig:4nec2-geometry-table} shows the same information as it is
+actually entered into the 4NEC2 antenna simulator, wire by wire, before the
+model is solved.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{fig_4nec2_geometry_table}
+  \caption[4NEC2 Geometry editor: wire-by-wire coordinate input for the HKD~G11KD-T2 model]{4NEC2 Geometry editor: wire-by-wire coordinate input for the HKD~G11KD-T2 model.\\[4pt]
+  Screenshot of the 4NEC2 antenna simulator's Geometry tab for the fourteen-wire
+  model: the four reflector bars (wires~1-4), the two folded-dipole conductors
+  and their two short end caps (wires~5-8), and the six directors
+  (wires~9-14). Each row gives the wire's segment count (\textbf{Segs}, the
+  Method-of-Moments discretisation of Section~\ref{subsec:mom}), its two
+  endpoint coordinates $(X_1,Y_1,Z_1)$ and $(X_2,Y_2,Z_2)$ in metres, and its
+  conductor radius. The short end-cap wires (7 and~8, three segments each)
+  close the folded-dipole loop; every other wire uses 21 segments, short
+  enough compared with $\lambda\approx\SI{491.5}{\milli\metre}$ to satisfy the
+  thin-wire, short-segment requirement of the Method of Moments. This table
+  is the direct numeric realisation of the physical dimensions surveyed in
+  Table~\ref{tab:hkd-geom}; the rendered result of solving this exact
+  geometry is shown in Figure~\ref{fig:4nec2-model} below.}
+  \label{fig:4nec2-geometry-table}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{fig_4nec2_wiremodel}
+  \caption[4NEC2 Method-of-Moments wire model of the HKD~G11KD-T2 antenna]{4NEC2 Method-of-Moments wire model of the HKD~G11KD-T2 antenna.\\[4pt]
+  The fourteen-wire NEC geometry represents the four U-frame reflector bars
+  (rear group), the two-wire folded-dipole driven element at the feed, and the
+  six directors extending toward the front. Wire radii range from
+  \SIrange{2.0}{3.5}{\milli\metre} to match the physical tubing dimensions of
+  Table~\ref{tab:hkd-geom}. The model is solved in free space
+  (\texttt{GN\,{-}1}) with a \SI{1}{\volt} excitation placed at the central
+  segment of the driven element.}
+  \label{fig:4nec2-model}
+\end{figure}
+
+% =====================================================================
+\section{Single-Element Validation: Impedance, Gain, Beamwidth, SWR}
+\label{sec:single-element-validation}
+
+Solving the model at \SI{610}{\mega\hertz} yields the single-element parameters
+collected in Table~\ref{tab:ant-params-sim}. This section answers questions~2
+and~3 of Section~\ref{sec:why-model}: what the real beam looks like, and
+whether the match is stable enough for the received power to be trusted.
+
+\begin{table}[H]
+  \centering
+  \caption[Simulated single-element parameters at 610~MHz (4NEC2, free space)]{Simulated single-element parameters at 610~MHz (4NEC2, free space).\\[4pt]
+           The eleven-element U-frame Yagi-Uda antenna (HKD G11KD-T2) was
+           solved in free space by the Method of Moments at the operating
+           frequency. All impedance and SWR values are referenced to the
+           75~$\Omega$ coaxial feed standard; gain and beamwidth are evaluated
+           in the E-plane.}
+  \label{tab:ant-params-sim}
+  \renewcommand{\arraystretch}{1.25}
+  \begin{tabularx}{\textwidth}{l >{\raggedright\arraybackslash}X}
+    \toprule
+    \textbf{Parameter} & \textbf{Value} \\
+    \midrule
+    Operating frequency               & \SI{610}{\mega\hertz} ($\lambda\approx\SI{491.5}{\milli\metre}$) \\
+    Input impedance $Z_\mathrm{in}$   & $108.4 - j22.0~\si{\ohm}$ \\
+    Reflection coeff. $|\Gamma|$ (at \SI{75}{\ohm}) & $\approx 0.215$ ($\approx\SI{-13.3}{dB}$) \\
+    SWR (at \SI{75}{\ohm})            & $1.55$ \\
+    Forward gain                      & \SI{9.48}{dBi} \\
+    Half-power beamwidth (E-plane)    & $\approx\SI{52}{\degree}$ \\
+    Radiation efficiency              & $\approx\SI{100}{\percent}$ (lossless, free space) \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+The input impedance is $Z_\mathrm{in}=(108.4 - j22.0)\,\si{\ohm}$: a real part close
+to the \SI{75}{\ohm} reference and a small capacitive reactance indicating the
+antenna is operating just below its exact resonance. As anticipated in
+Section~\ref{sec:matching}, this is the impedance of the complete Yagi
+structure, not the isolated folded-dipole estimate $Z_f$ of
+Eq.~\eqref{eq:folded-dipole}: director and reflector loading have pulled it
+well below the $\sim\!\SI{300}{\ohm}$ folded-dipole value. Referenced to
+\SI{75}{\ohm}, the reflection-coefficient magnitude is
+\begin{equation}
+    |\Gamma| = \left|\frac{Z_\mathrm{in}-Z_0}{Z_\mathrm{in}+Z_0}\right|
+             = \left|\frac{(108.4-j22.0)-75}{(108.4-j22.0)+75}\right|
+             \approx 0.215,
+    \label{eq:gamma-single}
+\end{equation}
+equivalent to a return loss of about \SI{-13.3}{dB}. Substituting $|\Gamma|=0.215$
+into Eq.~\eqref{eq:swr} gives $\mathrm{SWR}=(1+0.215)/(1-0.215)\approx 1.55$.
+An SWR of $1.55$ (comfortably below the conventional $2.0$ acceptability
+threshold) means that the great majority of incident power is delivered into the
+feed with negligible reflective loss, and that no additional matching network is
+required-the folded-dipole/$4{:}1$-balun front end matches the array to
+\SI{75}{\ohm} on its own. This directly answers question~3 of
+Section~\ref{sec:why-model}: the received power computed from the Friis
+relation (Eq.~\eqref{eq:friis}) is not being silently discounted by an
+unmatched feed.
+
+The antenna delivers a forward gain of \SI{9.48}{dBi}, nearly an order of
+magnitude above an isotropic radiator, with an E-plane half-power beamwidth of
+about \SI{52}{\degree} (Figure~\ref{fig:pattern}). The full three-dimensional
+directivity pattern (Figure~\ref{fig:3d-pattern}) confirms that this gain is
+concentrated into a single dominant end-fire main lobe with the rear suppressed
+by the U-frame reflector, and that no significant sidelobe structure redirects
+sensitivity toward the ground or the horizon. This beamwidth is a good
+compromise for an un-tracked or hand-tracked solar instrument: narrow enough to
+reject horizon noise and to give the U-frame reflector its high front-to-back
+ratio, yet wide enough that the Sun dwells within the main lobe for a useful
+fraction of the day without continuous mechanical steering.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{fig_pattern_eplane}
+  \caption[Simulated E-plane radiation pattern of the Yagi element (4NEC2, free space)]{Simulated E-plane radiation pattern of the Yagi element (4NEC2, free space).\\[4pt]
+           The end-fire main lobe directed toward the Sun is clearly visible,
+           along with the high front-to-back ratio achieved by the U-frame
+           reflector, which suppresses ground emission entering from behind.
+           The half-power beamwidth of approximately $\SI{52}{\degree}$ is wide
+           enough for the Sun to remain within the main lobe for several hours
+           without mechanical steering, yet narrow enough to reject horizon
+           noise and ground spillover.}
+  \label{fig:pattern}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{fig_3d_radiation_pattern}
+  \caption[Three-dimensional directivity pattern of the HKD~G11KD-T2 at \SI{610}{\mega\hertz} (4NEC2)]{Three-dimensional directivity pattern of the HKD~G11KD-T2 at \SI{610}{\mega\hertz} (4NEC2 antenna simulator).\\[4pt]
+  The colour scale runs from $-41$~dBi (deep blue) to $+9.48$~dBi (red),
+  confirming the peak forward gain reported in Table~\ref{tab:ant-params-sim}.
+  The dominant end-fire main lobe (red--yellow) accounts for the majority of
+  the radiated power and is directed toward the sky during solar transit.
+  The smaller rear lobe (blue) is substantially suppressed by the U-frame
+  reflector, yielding a high front-to-back ratio that limits ground thermal
+  noise pickup. The green arrows indicate the antenna boom axis orientation.}
+  \label{fig:3d-pattern}
+\end{figure}
+
+% ---------------------------------------------------------------------
+\subsection{Cross-Validation: Measurement, MoM, and FEM}
+\label{subsec:validation}
+
+A simulated result is only reliable if it is confirmed by other means. A
+particular strength of this study is that the single-element impedance match is
+confirmed by \emph{three independent methods} based on completely different
+principles: a direct physical measurement using a NanoVNA vector network
+analyser at the feed point (Figure~\ref{fig:nanovna-setup}), the
+Method-of-Moments simulation in the 4NEC2 antenna simulator, and an independent
+finite-element result from previous work on the same antenna.
+Table~\ref{tab:validation} shows all three.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{photo_nanovna_setup}
+  \caption[NanoVNA measurement at the HKD~G11KD-T2 feed point (Xuan~Mai)]{NanoVNA measurement at the HKD~G11KD-T2 feed point (Xuan~Mai).\\[4pt]
+  The NanoVNA vector network analyser is connected directly to the antenna
+  feed terminals via a short SMA-to-coaxial adapter, with the antenna oriented
+  skyward to reproduce operational conditions. Port~1 of the VNA drives the
+  driven element and records the reflected signal, from which $S_{11}$ and the
+  \SI{75}{\ohm}-referenced SWR at \SI{610}{\mega\hertz} are extracted.
+  This measurement constitutes the ``NanoVNA (measured)'' row of
+  Table~\ref{tab:validation}.}
+  \label{fig:nanovna-setup}
+\end{figure}
+
+\begin{table}[H]
+  \centering
+  \caption[Three-way SWR cross-validation at 610~MHz]{Three-way SWR cross-validation at 610~MHz.\\[4pt]
+           The standing-wave ratio referenced to 75~$\Omega$ is compared across
+           three independent methods: a direct VNA measurement at the Xuan~Mai
+           deployment site, the 4NEC2 Method-of-Moments solution obtained in
+           this work, and a Finite Element Method result from previous work on
+           the same physical antenna. All three results fall within the narrow
+           range 1.22--1.59, confirming that the simulated parameters are
+           reliable.}
+  \label{tab:validation}
+  \renewcommand{\arraystretch}{1.25}
+  \begin{tabularx}{\textwidth}{l >{\raggedright\arraybackslash}X c c}
+    \toprule
+    \textbf{Method} & \textbf{Principle} & \textbf{SWR (\SI{75}{\ohm})}
+                    & \textbf{$S_{11}$} \\
+    \midrule
+    NanoVNA (measured)    & physical (VNA)        & $1.59$        & $\approx\SI{-12.8}{dB}$ \\
+    4NEC2 (this work)     & Method of Moments     & $1.55$        & $\approx\SI{-13.3}{dB}$ \\
+    HFSS (previous work)  & Finite Element Method & $1.22$--$1.53$ & $\approx\SI{-13.6}{dB}$ to $\SI{-20}{dB}$ \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+All three results fall within the narrow SWR range of $1.2$--$1.6$, with the
+MoM result from this work sitting between the physical measurement and the
+finite-element solution. Agreement between a direct measurement and two solvers
+based on different numerical methods (integral-equation MoM versus volumetric
+FEM) is strong evidence that the extracted parameters are reliable.
+
+It is worth discussing the small differences between the three results rather
+than presenting an unrealistically perfect match. The measured SWR ($1.59$) is
+slightly worse than the simulated value ($1.55$). This is expected: the
+physical measurement includes balun insertion loss, connector mismatches, small
+fabrication tolerances, and the effect of the real measurement environment —
+none of which exist in the idealised free-space model. The FEM result covers a
+slightly wider range because it was obtained over several geometry iterations.
+Despite these differences, all three converge to within a few percent of each
+other in SWR, which justifies using the simulated pattern in the imaging
+pipeline.
+
+% =====================================================================
+\section{Mutual-Coupling Analysis and Impedance-Matrix Interpretation}
+\label{sec:coupling-rationale}
+
+Section~\ref{sec:single-element-validation} characterised one antenna on its
+own. This section asks the fourth and last question of
+Section~\ref{sec:why-model}: when a second, identical antenna is placed
+nearby to form an interferometric baseline, does it disturb the first one
+enough to matter?
+
+% ---------------------------------------------------------------------
+\subsection{From a Single Antenna to a Coupled Pair}
+\label{subsec:coupling-intuition}
+
+When an antenna stands entirely on its own, the voltage at its feed depends
+only on its own current, through its self-impedance:
+\begin{equation}
+    V_1 = Z_{11} I_1 .
+    \label{eq:v1-alone}
+\end{equation}
+Now bring a second, identical antenna into the picture, separated from the
+first by some baseline distance. Antenna~2 carries its own current $I_2$,
+and-exactly as for the parasitic elements of a single Yagi in
+Eq.~\eqref{eq:mutual-matrix}-that current radiates a field that induces an
+additional voltage on antenna~1. The feed voltage of antenna~1 is now
+\begin{equation}
+    V_1 = Z_{11} I_1 + Z_{12} I_2 ,
+    \label{eq:v1-coupled}
+\end{equation}
+and, by the same argument applied to antenna~2,
+\begin{equation}
+    V_2 = Z_{21} I_1 + Z_{22} I_2 .
+    \label{eq:v2-coupled}
+\end{equation}
+Written together as a two-port impedance matrix,
+\begin{equation}
+    \begin{bmatrix} V_1 \\ V_2 \end{bmatrix}
+    =
+    \begin{bmatrix} Z_{11} & Z_{12} \\ Z_{21} & Z_{22} \end{bmatrix}
+    \begin{bmatrix} I_1 \\ I_2 \end{bmatrix},
+    \label{eq:two-port-matrix}
+\end{equation}
+where:
+\begin{itemize}[leftmargin=1.5em,itemsep=1pt,topsep=2pt]
+  \item $Z_{11}$ and $Z_{22}$ are the \emph{self-impedances} of antennas~1 and~2,
+        equal to the isolated $Z_\mathrm{in}$ of Section~\ref{sec:single-element-validation}
+        when the two antennas are identical;
+  \item $Z_{12}=Z_{21}$ (for identical, reciprocal antennas) is the
+        \emph{mutual impedance}: the voltage induced on one antenna's feed
+        per unit current on the other.
+\end{itemize}
+If $Z_{12}$ is small compared with $Z_{11}$, the two antennas behave almost
+independently, exactly as required by the imaging theory of
+Chapter~\ref{ch:theory}. If $Z_{12}$ is not small, the beam, the impedance
+match, and-most importantly for an interferometer-the measured phase of each
+antenna are all disturbed by the presence of the other.
+
+The impedance actually seen at antenna~1's feed, once both antennas are
+simultaneously excited, is the \emph{active} (or driving-point) impedance,
+\begin{equation}
+    Z_{\mathrm{active},1} = \frac{V_1}{I_1} = Z_{11} + Z_{12}\,\frac{I_2}{I_1} ,
+    \label{eq:driving-impedance}
+\end{equation}
+which depends on the current ratio $I_2/I_1$ and therefore on how the pair is
+driven. Two special cases isolate $Z_{11}$ and $Z_{12}$ individually, and they
+are also the two cases that can each be run directly as a single simulation
+in the 4NEC2 antenna simulator:
+\begin{itemize}[leftmargin=1.5em,itemsep=1pt,topsep=2pt]
+  \item \textbf{Even mode} ($I_2=I_1$, both ports driven in phase):
+        $Z_\mathrm{even}=Z_{11}+Z_{12}$;
+  \item \textbf{Odd mode} ($I_2=-I_1$, ports driven \SI{180}{\degree} out of
+        phase): $Z_\mathrm{odd}=Z_{11}-Z_{12}$.
+\end{itemize}
+Solving this pair of equations gives $Z_{11}$ and $Z_{12}$ separately from two
+independent 4NEC2 runs:
+\begin{equation}
+    Z_{11} = \tfrac{1}{2}\big(Z_\mathrm{even}+Z_\mathrm{odd}\big),
+    \qquad
+    Z_{12} = \tfrac{1}{2}\big(Z_\mathrm{even}-Z_\mathrm{odd}\big).
+    \label{eq:z11-z12-solve}
+\end{equation}
+This even/odd technique, applied in Section~\ref{subsec:coupling-results}
+below, is the reason two simulations-not one-are run at every element
+separation.
+
+% ---------------------------------------------------------------------
+\subsection{The Independent-Sensor Assumption in Aperture Synthesis}
+\label{subsec:independence}
+
+The imaging framework adopted in this thesis-the van~Cittert-Zernike theorem
+and the dirty-image machinery of Chapter~\ref{ch:theory}-relies on a specific
+assumption: that each receiving element samples the spatial coherence
+function of the sky \emph{independently}, with a primary beam $A_n(l,m)$
+identical to the isolated single-element pattern \citep{tms2017}. In the
+language of Section~\ref{subsec:coupling-intuition}, this is precisely the
+statement that $Z_{12}$ is negligible compared with $Z_{11}$ at the array's
+operating baselines: when it holds, the measured cross-correlation between
+two elements is a clean sample of the complex visibility, and the recovered
+phase is purely the geometric delay between the two apertures, with no
+additional contribution from the antennas disturbing one another.
+
+% ---------------------------------------------------------------------
+\subsection{Why Coupling Specifically Corrupts Interferometric Phase}
+\label{subsec:coupling-phase}
+
+For a total-power instrument, the main consequence of coupling would be a
+mismatch loss. For an \emph{interferometer} the consequence is more insidious,
+because the measurement is fundamentally a measurement of phase. Coupling
+perturbs the active impedance of Eq.~\eqref{eq:driving-impedance} (mismatch
+and standing waves), distorts and makes asymmetric the primary beam, and-most
+damagingly-adds a parasitic, geometry-dependent phase term to the received
+signal. The interferometer requires that the measured phase be the pure
+geometric delay between the elements; any additional coupling-induced phase
+contaminates the visibility and propagates directly into the dirty image as
+spurious structure \citep{tms2017,gupta1983}.
+
+The standard ways to quantify coupling are equivalent and well established
+\citep{balanis2016,pozar2012}: the off-diagonal mutual impedance $Z_{12}$; the
+transmission scattering parameter $S_{21}$ (the same information expressed in
+incident/reflected waves, and the quantity most directly measurable with a
+network analyser); the full $N\!\times\!N$ coupling matrix for an
+$N$-element array; and the shift of the active impedance relative to the
+isolated element. It is therefore not sufficient to \emph{assume} the elements
+are independent at the operating baseline-the assumption must be
+\emph{demonstrated} by computing one of these measures as a function of
+element separation. That demonstration follows next.
+
+% ---------------------------------------------------------------------
+\subsection{Array Layout and Mutual-Coupling Extraction}
+\label{subsec:coupling-results}
+
+To quantify the inter-element coupling, a two-port model was built in the
+4NEC2 antenna simulator by duplicating the validated single element and
+translating the copy along the baseline (east-west) axis, leaving the
+individual antenna geometry untouched. Four separations were studied:
+\SI{0.5}{\metre}, \SI{5}{\metre}, \SI{10}{\metre}, and \SI{15}{\metre}.
+
+Both ports were excited with a \SI{1}{\volt} source in phase (the
+\emph{even mode} of Section~\ref{subsec:coupling-intuition}). Under even-mode
+excitation each port presents the active impedance
+$Z_\mathrm{active}=Z_{11}+Z_{12}$, so the shift of $Z_\mathrm{active}$ away
+from the isolated value is read directly, in a single run, as the fingerprint
+of the mutual impedance $Z_{12}$. The even-mode run additionally yields the
+two-element array pattern. To obtain the magnitude of the transmission
+coefficient $|S_{21}|$ precisely-which cannot be read from a single run-the
+even/odd technique of Eq.~\eqref{eq:z11-z12-solve} was used, combining the
+in-phase run with a \SI{180}{\degree} out-of-phase (odd-mode) run. The results
+are given in Table~\ref{tab:coupling}.
+
+\begin{table}[H]
+  \centering
+  \caption[Mutual coupling versus east-west element separation (4NEC2)]{Mutual coupling versus east-west element separation (4NEC2 antenna simulator).\\[4pt]
+           Two U-frame Yagi elements were simulated at four separations using
+           the even/odd excitation technique. $|\Delta Z|$ is the
+           active-impedance shift magnitude relative to the isolated value
+           ($Z_\mathrm{in}=108.4-j22.0\,\si{\ohm}$). Coupling falls from
+           $-34$~dB at 0.5~m ($\approx1\lambda$) to below $-78$~dB at 5~m
+           and below $-90$~dB at 15~m element separation, formally
+           establishing the independent-sensor assumption.}
+  \label{tab:coupling}
+  \renewcommand{\arraystretch}{1.3}
+  \begin{tabular}{l c c c c}
+    \toprule
+    \textbf{Baseline} & \textbf{$d/\lambda$} &
+    \textbf{$Z_\mathrm{in}$, ant.~1 ($\si{\ohm}$)} &
+    \textbf{$|\Delta Z|$ ($\si{\ohm}$)} & \textbf{$|S_{21}|$ (dB)} \\
+    \midrule
+    isolated        & -   & $108.4 - j22.0$ & $0$     & -  \\
+    \SI{0.5}{\metre} & $1.0$  & $108.0 - j18.0$ & $3.94$  & $-34$ \\
+    \SI{5}{\metre}   & $10.2$ & $108.4 - j21.9$ & $0.028$ & $-78$ \\
+    \SI{10}{\metre}  & $20.3$ & $108.4 - j22.0$ & $0.010$ & $-87$ \\
+    \SI{15}{\metre}  & $30.5$ & $108.4 - j22.0$ & $0.007$ & $-90$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+The behaviour is unambiguous. At \SI{0.5}{\metre} ($\approx\!1\lambda$) the two
+elements still share near-field structure: the active reactance shifts from
+$-22.0$ to $-18.0~\si{\ohm}$, a $3.94~\si{\ohm}$ ($3.6\%$) change, and the
+isolation is $|S_{21}|\approx\SI{-34}{dB}$. This is the deliberately
+``worst case'' point, included to show the coupling regime where it is genuinely
+present. Once the separation reaches \SI{5}{\metre} ($\approx\!10\lambda$),
+however, the coupling has already collapsed: the impedance shift falls below
+$0.03~\si{\ohm}$ ($<0.03\%$) and the isolation drops past
+\SI{-78}{dB}. By \SI{15}{\metre} the impedance perturbation is within numerical
+noise and $|S_{21}|\approx\SI{-90}{dB}$.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{fig_coupling_curve}
+  \caption[Mutual-coupling isolation and impedance shift versus element separation]{Mutual-coupling isolation and impedance shift versus element separation.\\[4pt]
+           The isolation $|S_{21}|$ and active-impedance shift $|\Delta Z|$
+           are both plotted against east-west element separation. Both quantities
+           collapse rapidly beyond $1\lambda$: by 5~m ($\approx10\lambda$) the
+           isolation exceeds 78~dB and $|\Delta Z|<0.03\,\si{\ohm}$, confirming
+           that elements at the operational baselines behave as fully independent
+           sensors.}
+  \label{fig:coupling}
+\end{figure}
+
+The operational baselines of the simulated interferometer start at
+\SI{8}{\metre}; the imaging pipeline used in the remainder of this thesis is
+configured for baselines of \SI{8}{\metre}, \SI{16}{\metre}, and \SI{24}{\metre} ($\approx\!48.8\lambda$), which lies
+far deeper still in the decoupled regime. Extrapolating the monotonic decay of
+Table~\ref{tab:coupling}, the isolation at \SI{24}{\metre} is well below
+\SI{-90}{dB} and the active-impedance perturbation is entirely negligible.
+Across the full range of operating baselines, therefore, the elements neither
+perturb each other's impedance nor distort each other's radiation pattern at any
+level that could affect the measurement, and the parasitic coupling phase
+discussed in Section~\ref{subsec:coupling-phase} is absent. The
+independent-sensor assumption underlying the van~Cittert-Zernike imaging is thus
+not merely assumed but quantitatively established-question~4 of
+Section~\ref{sec:why-model} is answered-and the signal-processing
+pipeline may treat each antenna as an ideal, independent sensor whose measured
+phase is pure geometric delay.
+
+% =====================================================================
+\section{Primary-Beam Extraction for Chapter~\ref{ch:pipeline}}
+\label{sec:primary-beam-extraction}
+
+The final product of the electromagnetic model is the primary beam consumed by
+the imaging pipeline. The single-element far-field pattern was exported from
+the 4NEC2 antenna simulator's output over a $181\times361$ grid in
+$(\theta,\phi)$ (a $1^{\circ}$ step in both elevation and azimuth) and
+normalised to unity at boresight. This normalised pattern is the angular
+response multiplied onto each antenna's received voltage in the pipeline, so
+that the simulated sky is sampled through the true, physically derived
+antenna response rather than through an idealised isotropic or Gaussian beam-directly
+answering question~2 of Section~\ref{sec:why-model}.
+
+A point of method deserves emphasis. The pattern exported is that of the
+\emph{single element} (\SI{9.48}{dBi}), \emph{not} that of the two-element array
+(\SI{12.49}{dBi}) produced in the even-mode coupling runs. This is deliberate
+and physically necessary: in an interferometer the array factor is synthesised
+by the \emph{cross-correlation} of the two independent element signals, not by
+the radiation pattern of a combined aperture. Embedding the two-element array
+pattern as the primary beam would double-count the inter-element geometry-once
+in the beam and again in the correlation-and corrupt the visibilities. The
+correct primary beam is therefore the isolated element pattern, exactly as the
+negligible-coupling result of Section~\ref{subsec:coupling-results} entitles us
+to use. The exported file (\texttt{UFRAME\_primary\_beam\_610MHz.npz}) is loaded
+directly by the pipeline of Chapter~\ref{ch:pipeline}: it is read by the
+\texttt{PrimaryBeam} class and applied at every simulation time step to scale
+the received signal amplitude via Eq.~\eqref{eq:psig}. Every downstream
+result-transit power, visibility amplitude, dirty-image brightness-therefore
+reflects the actual Yagi beam characterised in this chapter.
+
+With this, all four questions posed in Section~\ref{sec:why-model} have been
+answered by direct evidence rather than by assumption: the element receives a
+well-matched \SI{610}{\mega\hertz} signal (Section~\ref{sec:single-element-validation});
+its real, simulated beam-not a Gaussian placeholder-is what the pipeline uses
+(this section); its impedance match is stable and threefold cross-validated
+(Section~\ref{subsec:validation}); and mutual coupling at every operational
+baseline is negligible, so the independent-sensor assumption of
+Chapter~\ref{ch:theory} holds (Section~\ref{sec:coupling-rationale}). Recalling
+the summary of Section~\ref{sec:reference-systems}, Learmonth supplied the
+validated solar input, the Xuan~Mai field campaign supplied the motivation, and
+the 4NEC2 antenna simulator supplied the controlled antenna response and
+coupling estimate that together make the pipeline of the next chapter
+trustworthy.
+\clearpage

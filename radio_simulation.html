@@ -164,7 +164,7 @@ input[type=file]{display:none}
 
     <label>Vĩ độ đài quan sát (°)</label>
     <div class="row">
-      <input type="number" id="lat-inp" value="-21.8" min="-90" max="90" step="0.1">
+      <input type="number" id="lat-inp" value="-22.22" min="-90" max="90" step="0.1">
       <span class="unit">° (Learmonth)</span>
     </div>
 
@@ -300,7 +300,7 @@ print(f"Saved beam.json  ({len(el_deg)} pts, peak={gain_max:.2f} dBi)")</code></
         <h3>Công thức tham khảo</h3>
         <ul>
           <li>Bước sóng: <code>λ = c / f</code></li>
-          <li>Toạ độ UV (EW baseline): <code>u = B sin H / λ</code>, <code>v = −B sin δ cos H / λ</code></li>
+          <li>Toạ độ UV (EW baseline, TMS Eq. 4.1): <code>u = B cos H / λ</code>, <code>v = B sin δ · sin H / λ</code></li>
           <li>Chu kỳ vân tại transit: <code>T = λ / (B cos δ ω_E)</code> giây</li>
           <li>Độ phân giải: <code>θ ≈ λ / B_max</code> radian</li>
           <li>Jinc visibility (đĩa đồng nhất): <code>|V| = |2J₁(π θ☉ b/λ) / (π θ☉ b/λ)|</code></li>
@@ -340,7 +340,7 @@ const S = {
   dayFlux:  null,   // [{t_h, sfu}]
   freqKey:  'F610',
   fc:       610e6,
-  lat_deg:  -21.8,
+  lat_deg:  -22.22,
   dec_deg:  0.0,
   positions: [[0,0],[8,0],[16,0],[24,0]],  // [East, North] pairs
   beamModel:'gaussian',
@@ -471,7 +471,7 @@ function computeFringes(uvData, fc, dec_deg, dayFlux, nPts=500) {
   const fluxEnv = Hr.map((_,idx) => getFlux(idx));
 
   // Latitude từ uvData (được lưu khi computeUV chạy)
-  const lat = (uvData.lat_deg ?? -21.8) * Math.PI / 180;
+  const lat = (uvData.lat_deg ?? -22.22) * Math.PI / 180;
   const sL = Math.sin(lat), cL = Math.cos(lat);
   const sd = Math.sin(dec), cd = Math.cos(dec);
 

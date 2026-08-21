@@ -1,0 +1,1163 @@
+% =====================================================================
+%  CHAPTER 4 — SIMULATION RESULTS AND ANALYSIS
+% =====================================================================
+\chapter{SIMULATION RESULTS AND ANALYSIS}
+\label{ch:results}
+
+The previous chapters built the simulation from three foundations: the physical
+theory of solar radio interferometry in Chapter~\ref{ch:theory}, the receiving-element
+model in Chapter~\ref{ch:antenna}, and the end-to-end software pipeline in
+Chapter~\ref{ch:pipeline}. This chapter evaluates whether those components work
+together as a useful design tool for a future low-cost solar radio interferometer.
+
+The purpose of this chapter is not to introduce new theory or new derivations; those
+belong to Chapters~\ref{ch:theory}, \ref{ch:antenna} and~\ref{ch:pipeline}. Instead,
+each result below uses the relations already established there as a validation
+benchmark and answers one practical question about the simulation pipeline: whether
+the geometry, the source model, the imaging stage, the array layout, the receiver
+sensitivity, and the antenna beam are all correctly and usefully represented.
+Agreement with an analytic benchmark does not mean that the Learmonth receiver
+hardware itself has been reproduced; it means that the proposed low-cost
+interferometer model responds correctly when driven by a real solar flux record.
+The results are therefore presented as a sequence of validation levels, moving from
+analytic checks (Sections~\ref{sec:fringe-results}-\ref{sec:dirty-results}) to design
+and sensitivity studies (Sections~\ref{sec:sweep}-\ref{sec:beam-fidelity}), and
+finally to practical deployment diagnostics (Sections~\ref{sec:apsynsim}-\ref{sec:clock-offset}).
+
+% ---------------------------------------------------------------------
+\section{Result Strategy and Validation Logic}
+\label{sec:result-strategy}
+
+Table~\ref{tab:result-strategy} summarises the logic followed throughout the chapter:
+each row identifies a block of the simulation pipeline, the result used to test it,
+and what agreement with that result actually establishes. Reading the chapter with
+this table in mind clarifies why the results are ordered as they are - each section
+depends on the blocks validated by the sections before it.
+
+\begin{table}[H]
+  \centering
+  \caption[Validation strategy: pipeline block, test result, and what it establishes]{Validation strategy: pipeline block, test result, and what it establishes.\\[4pt]
+  Each result in this chapter targets one block of the simulation pipeline
+  described in Chapter~\ref{ch:pipeline}. Sections~\ref{sec:fringe-results}-\ref{sec:dirty-results}
+  test internal correctness against analytic predictions; Sections~\ref{sec:sweep}-\ref{sec:beam-fidelity}
+  use the validated pipeline for design and sensitivity studies; Sections~\ref{sec:apsynsim}-\ref{sec:clock-offset}
+  place the simulation in context and diagnose the gap to real hardware.}
+  \label{tab:result-strategy}
+  \renewcommand{\arraystretch}{1.3}
+  \begin{tabularx}{\textwidth}{l X X}
+    \toprule
+    \textbf{Pipeline block} & \textbf{Result used to test it} & \textbf{What it establishes} \\
+    \midrule
+    Geometry (ENU$\rightarrow$XYZ$\rightarrow\uvw$, hour angle)
+      & Fringe period, Section~\ref{sec:fringe-results}
+      & Baseline and hour-angle geometry are implemented correctly \\
+    Source model (resolved solar disk)
+      & $\jinc$ visibility decay, Section~\ref{sec:vis-results}
+      & Solar angular size is represented correctly \\
+    Correlator, $uv$-sampling, inverse DFT
+      & Dirty image $=$ sky $*$ PSF, Section~\ref{sec:dirty-results}
+      & The imaging stage is internally consistent \\
+    Array layout
+      & $uv$-coverage, PSF, dynamic range across five geometries, Section~\ref{sec:sweep}
+      & Which layout is preferable for a future deployment \\
+    Receiver noise model
+      & Minimum detectable flux and burst SNR, Section~\ref{sec:snr-analysis}
+      & Quiet Sun and bursts are detectable under the model's assumptions \\
+    Antenna primary beam
+      & Gaussian versus 4NEC2 transit power, Section~\ref{sec:beam-fidelity}
+      & The real antenna beam materially changes calibration, not just cosmetics \\
+    Field deployment
+      & Solar-excess comparison with Hoa~Lac hardware, Section~\ref{sec:real-comparison}
+      & Where the gap between simulation and hardware measurement originates \\
+    Clock model
+      & Phase-error and coherence-loss study, Section~\ref{sec:clock-offset}
+      & Why unsynchronised SDRs cannot recover a stable fringe \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+The remainder of this chapter follows this order: each section states the question
+being tested, presents the result, interprets it against the corresponding block of
+the pipeline, and, where relevant, draws out its implication for a future hardware
+deployment.
+
+% ---------------------------------------------------------------------
+\section{Geometry Validation: Fringe Pattern}
+\label{sec:fringe-results}
+
+The first and most direct question the pipeline must answer is whether the array
+geometry and hour-angle calculation are correct. Driving the two-element sub-array at
+the \SI{8}{\metre} baseline with the real flux and the exact $\uvw$ geometry
+produces the cross-correlation amplitude shown in Fig.~\ref{fig:fringe}. The
+measured fringe period is approximately 14~minutes, in agreement with the analytic
+prediction of Eq.~\eqref{eq:fringeperiod} for $b=\SI{8}{\metre}$,
+$\lambda=\SI{0.49}{\metre}$ and $\delta=0.0^\circ$ (spring equinox). Because the fringe period depends
+only on the geometry and not on the source structure, this agreement confirms that the
+ENU$\rightarrow$XYZ$\rightarrow\uvw$ transformation~\citep{tms2017} and the hour-angle parameterisation
+are implemented correctly, and that the pipeline can be trusted to test baseline and
+array-layout choices ahead of a physical deployment.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{fig_fringe_pattern}
+  \caption[Simulated fringe pattern for the 8-m baseline (20~March~2025)]{Simulated fringe pattern for the 8-m baseline (20~March~2025).\\[4pt]
+  The real part of the baseline visibility is plotted over the full
+  spring-equinox transit ($H\in[\pm90^\circ]$, $\delta=0^\circ$). The
+  approximately 14-minute fringe period matches the analytic prediction of
+  Eq.~\eqref{eq:fringeperiod} to within the sampling resolution, confirming
+  that the ENU$\rightarrow$XYZ$\rightarrow\uvw$ transformation and the
+  hour-angle parameterisation are both correctly implemented.}
+  \label{fig:fringe}
+\end{figure}
+
+% ---------------------------------------------------------------------
+\section{Source-Structure Validation: The Resolved Solar Disk}
+\label{sec:vis-results}
+
+The Sun is not a point source, so the next question is whether the simulated array
+correctly represents its finite angular size. When the source is modelled as a
+uniformly bright disk of the solar angular size, the
+amplitude of the visibility as a function of baseline length follows the $\jinc$ curve of
+Eq.~\eqref{eq:jinc}. Figure~\ref{fig:jinc} overlays the simulated visibility amplitudes
+on the analytic $\jinc$ function; the simulated points fall on the curve, and the first
+null occurs at the predicted baseline. This confirms that the forward visibility engine
+correctly implements the van Cittert-Zernike relation~\citep{tms2017,taylor1999synthesis} and that the array, when extended,
+is able to resolve the solar disk rather than merely detect it.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{fig_visibility_jinc}
+  \caption[Visibility amplitude versus baseline length: simulation versus $\jinc$ prediction]{Visibility amplitude versus baseline length: simulation versus $\jinc$ prediction.\\[4pt]
+  Simulated visibility amplitudes (points) at the transit peak are overlaid on
+  the analytic $\jinc(u\theta_\odot)$ curve for a uniform solar disk of angular
+  diameter approximately 32~arcminutes (Eq.~\eqref{eq:jinc}). Agreement across
+  all sampled baselines, including the position of the first null, validates
+  that the forward visibility engine correctly implements the van
+  Cittert-Zernike theorem.}
+  \label{fig:jinc}
+\end{figure}
+
+% ---------------------------------------------------------------------
+\section{Imaging Validation: Dirty Image as Sky Convolved with the PSF}
+\label{sec:dirty-results}
+
+With the geometry and the source model both validated, the remaining question is
+whether the imaging stage correctly turns sparse visibility samples into a
+synthesised image. The central consistency check is Eq.~\eqref{eq:dirty}: the dirty
+image must equal the input sky convolved with the independently computed dirty beam~\citep{taylor1999synthesis,tms2017}.
+Figure~\ref{fig:psf-check} shows, side by side, the dirty image produced by the full
+DFT inversion and the sky model convolved with the PSF computed from the sampling
+function alone. The two are indistinguishable to numerical precision, demonstrating that
+the correlator, the $uv$-sampling, and the inverse transform are mutually consistent.
+
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{fig_dirty_from_dft}
+    \caption{Dirty image (DFT inversion)}
+  \end{subfigure}\hfill
+  \begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{fig_sky_conv_psf}
+    \caption{Sky $*$ PSF (independent)}
+  \end{subfigure}
+  \caption[Dirty-image consistency check: DFT inversion versus sky convolved with PSF]{Dirty-image consistency check: DFT inversion versus sky convolved with PSF.\\[4pt]
+  Panel~(a) shows the dirty image produced by inverting all simulated
+  visibilities via the direct DFT of Eq.~\eqref{eq:dirty-dft}. Panel~(b)
+  shows the same sky model convolved with the independently computed
+  synthesised beam. The two are numerically identical to machine precision,
+  demonstrating that the correlator, the $uv$-sampling function, and the
+  inverse DFT together implement Eq.~\eqref{eq:dirty} correctly.}
+  \label{fig:psf-check}
+\end{figure}
+
+Two further points support the credibility of this three-level analytic validation
+(geometry, source structure, imaging). First, the quiet-Sun \SI{610}{\mega\hertz} flux
+used to drive the pipeline is stable over the transit; far from being a weakness, this
+stability is ideal for instrument validation, since any departure of the simulated
+fringe from the prediction can then be attributed to the modelled geometry rather than
+to source variability. Second, the ionosphere is effectively common-mode for the
+baselines used ($\lesssim\SI{130}{\metre}$ at \SI{610}{\mega\hertz}), with a residual
+differential phase of about one degree, so it does not corrupt the differential
+measurement on which the fringe and visibility checks depend. Taken together with
+Sections~\ref{sec:fringe-results} and~\ref{sec:vis-results}, the credibility of the
+simulation therefore rests not on the number of observing days but on the simultaneous
+agreement with several independent analytic benchmarks - exactly the standard by which
+an instrument model should be judged, and the basis on which the design and
+sensitivity studies of the following sections can be trusted.
+
+% ---------------------------------------------------------------------
+\section{Array-Geometry Design Study}
+\label{sec:sweep}
+
+With the pipeline validated at the analytic level, it can be used to answer a design
+question that cannot be tested cheaply in the field: which antenna layout is
+preferable for a future deployment? The pipeline was run over a sweep of
+five array geometries sharing the same number of elements: a compact east-west line, a
+north-south line, a tee, a graded cross, and a randomised layout. For each, the
+$uv$-coverage, the dirty beam, and the restored image were computed and exported as
+static figures together with the numerical data. Table~\ref{tab:sweep} summarises the
+qualitative trade-offs.
+
+\begin{table}[H]
+  \centering
+  \caption[Qualitative comparison of array geometries in the parametric sweep]{Qualitative comparison of array geometries in the parametric sweep.\\[4pt]
+  Same element count in all configurations). Each row summarises the dominant
+  imaging characteristic of the corresponding layout: the compact east-west
+  array matches the deployed field configuration but resolves only one axis;
+  the graded cross achieves the highest two-dimensional coverage and the
+  lowest PSF sidelobe level.}
+  \label{tab:sweep}
+  \renewcommand{\arraystretch}{1.25}
+  \begin{tabularx}{\textwidth}{l l X}
+    \toprule
+    \textbf{Layout} & \textbf{Max baseline} & \textbf{Imaging characteristic} \\
+    \midrule
+    Compact EW    & \SI{24}{\metre}  & Matches the field array; resolves only the EW
+                                       direction; elongated beam. \\
+    NS line       & \SI{105}{\metre} & Complementary NS resolution; poor EW. \\
+    Tee           & moderate         & Two-dimensional coverage; asymmetric beam. \\
+    Graded cross  & \SI{130}{\metre} & Most isotropic coverage; resolves the solar disk;
+                                       lowest sidelobes. \\
+    Random        & variable         & Irregular but space-filling coverage; useful as a
+                                       reference. \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{fig_layout_sweep}
+  \caption[$uv$-coverage and dirty beams for the five-geometry parametric sweep]{$uv$-coverage and dirty beams for the five-geometry parametric sweep.\\[4pt]
+  Top row: $uv$-plane track patterns accumulated over the 12-hour transit;
+  bottom row: corresponding synthesised dirty beams. Columns from left to
+  right: compact east-west, north-south linear, tee-shaped, extended graded
+  cross, and random two-dimensional. The graded cross (baselines to
+  \SI{130}{\metre}) produces the most isotropic $uv$-coverage and the most
+  compact, symmetric beam with the lowest sidelobe level.}
+  \label{fig:sweep}
+\end{figure}
+
+The compact east-west array-the geometry actually built in the field-detects the Sun
+and reproduces the correct fringe behaviour but, with baselines only to \SI{24}{\metre},
+resolves structure in one direction only. The extended graded cross, reaching
+\SI{130}{\metre}, achieves the two-dimensional coverage needed to resolve the solar disk.
+This quantifies the upgrade path from the existing instrument to one capable of imaging,
+rather than merely detecting, solar structure. Longer baselines alone are not
+sufficient, however: PSF sidelobe level and $uv$-coverage uniformity are equally
+decisive, as the dynamic-range comparison of Section~\ref{sec:detectability} shows. The
+choice of a deployment layout must therefore weigh baseline length against these
+attributes together, rather than maximising baseline length in isolation.
+
+\paragraph{A minimum-redundancy alternative: Case~1.75.} Section~\ref{subsec:case175}
+of Chapter~\ref{ch:pipeline} evaluated a sixth layout at the same element count and
+spacing scale as Cases~1 and~1.5, but built on a different design principle: a
+DLITE-inspired triangle-plus-centre arrangement~\citep{helmboldt2021dlite} in which
+every one of the six baselines points in a distinct direction, rather than the two
+redundant pairs produced by a symmetric cross. The result (Figs.~\ref{fig:case175-geometry}
+and~\ref{fig:case175-eval} of Chapter~\ref{ch:pipeline}) confirms that this
+non-redundant $uv$-sampling strategy is genuinely effective at extracting
+two-dimensional image information from a minimal antenna count: the North-South FWHM
+improves $9.1\times$ over the purely East-West Case~1, exceeding the resolution
+recovered by the symmetric cross of Case~1.5 with the same four elements and the same
+$8$-m spacing unit.
+
+This benefit is intrinsically tied to using at least four elements: three antennas
+alone can form only a single triangle with no independent centre-referenced baseline,
+and fewer than four elements cannot supply the six mutually non-redundant $uv$-tracks
+that make the layout effective in the first place - consistent with DLITE itself being
+built from exactly four elements for this reason, no more and no fewer. It is equally
+important not to over-read the absolute resolution achieved here, or to read Case~1.75
+as a simulation of DLITE itself: Case~1.75 reuses the $8$-m baseline scale of Cases~1
+and~1.5 purely for direct comparability, and is evaluated at \SI{610}{\mega\hertz},
+whereas DLITE operates at \SIrange{30}{40}{\mega\hertz} with LWA-style crossed-dipole
+antennas on baselines of several hundred metres~\citep{helmboldt2021dlite,carson2022dlite}.
+Only the minimum-redundancy \emph{topology} is carried over here, not DLITE's
+frequency, antenna, or baseline scale. The result therefore validates that topology
+-non-redundant triangle-plus-centre sampling- as an efficient way to reconstruct a
+two-dimensional image from four elements, not the absolute angular resolution that a
+future physical deployment following the same principle could achieve with longer
+baselines.
+
+% ---------------------------------------------------------------------
+\section{Sensitivity and Burst Detectability}
+\label{sec:snr-analysis}
+
+The design study of Section~\ref{sec:sweep} assumed that the receiver has enough
+sensitivity to detect the source in the first place. This section answers that
+question directly: is the solar signal strong enough, given the simulated receiver's
+noise floor, to be detected and, in the case of transient bursts, resolved with
+useful dynamic range?
+
+\subsection{The Radiometer Equation}
+
+The fundamental sensitivity limit of a single-dish (or single-baseline) radio
+measurement is the \emph{radiometer equation}~\citep{tms2017,kraus1986}: for a
+total-power integration over time $\tau$ and bandwidth $\Delta\nu$, the RMS
+fluctuation of the system temperature estimate, $\Delta T_\mathrm{rms}$
+(Eq.~\eqref{eq:radiometer} of Chapter~\ref{ch:theory}), converts via the Friis
+relation (Eq.~\eqref{eq:friis}) to a minimum detectable flux density (MDF):
+\begin{equation}
+  \Delta S_{\rm min} = \frac{2\,k_B\,T_{\rm sys}}{A_e\sqrt{\Delta\nu\,\tau}}.
+  \label{eq:mdf}
+\end{equation}
+For the simulation parameters ($T_{\rm sys}=\SI{150}{\kelvin}$,
+$\Delta\nu=\SI{1}{\mega\hertz}$, $A_e\approx\SI{0.17}{\metre\squared}$),
+Table~\ref{tab:snr-bins} evaluates Eq.~\eqref{eq:mdf} over a range of
+\texttt{INTEGRATION\_BINS} values and compares $\Delta S_{\rm min}$ with
+the quiet-Sun flux of $\sim\SI{100}{\sfu}$.
+
+\begin{table}[H]
+  \centering
+  \caption[Minimum detectable flux density and SNR versus integration-dump count]{Minimum detectable flux density and SNR versus integration-dump count.\\[4pt]
+  Values of $\Delta S_{\rm min}$ (Eq.~\eqref{eq:mdf}) and the quiet-Sun SNR
+  are tabulated as a function of the number of correlator dumps
+  (\texttt{INTEGRATION\_BINS})
+  over the 12-hour spring-equinox transit.
+  The configuration used in this thesis is highlighted.}
+  \label{tab:snr-bins}
+  \renewcommand{\arraystretch}{1.3}
+  \begin{tabular}{c c c c c}
+    \toprule
+    \textbf{Bins} & $\boldsymbol{\tau}$ (s) & $\boldsymbol{\sigma_{\Delta T}}$ (mK)
+      & $\boldsymbol{\Delta S_{\rm min}}$ (SFU) & \textbf{Quiet-Sun SNR} \\
+    \midrule
+    10   & 4320 & 2.3  & 0.026 & $\sim$3\,800 \\
+    25   & 1728 & 3.6  & 0.041 & $\sim$2\,400 \\
+    \rowcolor{LightCyan}
+    50   & 864  & 5.1  & 0.058 & $\sim$1\,700 \\
+    100  & 432  & 7.2  & 0.082 & $\sim$1\,200 \\
+    200  & 216  & 10.2 & 0.116 & $\sim$860   \\
+    500  & 86   & 16.2 & 0.183 & $\sim$540   \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+All entries in Table~\ref{tab:snr-bins} yield quiet-Sun SNR in excess of
+500:1. Even the coarsest choice (10 dumps) achieves
+$\Delta S_{\rm min}\approx\SI{0.026}{\sfu}$, whereas the quiet-Sun flux
+is $\sim\SI{100}{\sfu}$-a margin of more than $3\,700\times$. The
+simulation is therefore not sensitivity-limited by thermal noise; it is
+limited by the sparsity of the UV coverage and the associated PSF sidelobe
+level, consistent with the layout trade-offs identified in Section~\ref{sec:sweep}.
+
+\subsection{Per-Sample Signal-to-Noise Ratio}
+
+At the level of a single voltage sample, the picture looks different. For the
+quiet-Sun case ($S_\nu\approx\SI{100}{\sfu}$), the signal power at a single antenna
+element follows from Eq.~\eqref{eq:psig}:
+\begin{equation}
+  P_{\rm sig} = \tfrac{1}{2}\times0.17\times10^{-22}\times100\times10^6
+    \approx \SI{8.5e-16}{\watt}.
+  \label{eq:psig-value}
+\end{equation}
+The corresponding Johnson-Nyquist noise power (Eq.~\eqref{eq:johnson}) is
+\begin{equation}
+  P_n = 1.381\times10^{-23}\times150\times10^6
+    \approx \SI{2.07e-15}{\watt}.
+  \label{eq:johnson-value}
+\end{equation}
+The per-sample SNR is thus
+\begin{equation}
+  \frac{P_{\rm sig}}{P_n} \approx 0.41 \;\approx\; -3.8~\si{dB},
+  \label{eq:persample-snr}
+\end{equation}
+meaning each individual voltage sample is noise-dominated, as in any real radio
+telescope. Averaging over $N_s$ samples per dump recovers the signal,
+\begin{equation}
+  \mathrm{SNR}_{\rm dump} = \frac{P_{\rm sig}}{P_n}\sqrt{N_s}
+    \approx 0.41\times\sqrt{1000} \approx 13,
+  \label{eq:snr-dump}
+\end{equation}
+where $N_s = N_{\rm samples}/\texttt{INTEGRATION\_BINS} = 50\,000/50 = 1\,000$ is the
+number of simulated voltage samples averaged per correlator dump - a much smaller
+count than the Nyquist-independent sample number $\Delta\nu\,\tau$ implicit in the
+radiometer equation (Eq.~\eqref{eq:radiometer}) behind Table~\ref{tab:snr-bins}. This
+gives a time-averaged fringe amplitude recoverable at $13\times\sqrt{50}\approx92$:1
+across the full transit. This per-sample-count check and the radiometer-equation
+sensitivity of Table~\ref{tab:snr-bins} answer two different questions - the former
+confirms that the implemented discrete voltage chain behaves as expected at the
+sample level, the latter states the physical sensitivity limit used throughout the
+rest of this chapter - and the two figures should not be read as numerically
+interchangeable. This low per-sample SNR is also why the sliding-RMS envelope
+visualisation of Chapter~\ref{ch:pipeline} is necessary: only a $\sim\!500$-sample
+running mean reveals the slowly varying solar-flux envelope hidden in a single
+noise-like voltage trace.
+
+\subsection{The LSB $\geq 3$ Criterion as a Quantisation Sanity Check}
+
+Before FPGA export, the pipeline enforces the LSB check of
+Eq.~\eqref{eq:lsb-check} from Chapter~\ref{ch:pipeline}: the noise voltage
+$V_{\rm noise}$ multiplied by the ADC scale factor of Eq.~\eqref{eq:scale} must be
+at least 3. If this fails, the noise is clipped
+into fewer than three LSBs, meaning the ADC is over-ranging and quantisation
+noise would corrupt the cross-correlation. For the March 2025 transit the noise
+floor occupies well over 20 LSBs at the chosen scale factor, confirming that the
+16-bit dynamic range is correctly matched to the signal-plus-noise envelope.
+
+\subsection{Flux Levels and Detectability of Solar Radio Events}
+\label{sec:detectability}
+
+Solar radio emission at \SI{610}{\mega\hertz} spans more than four orders of
+magnitude in flux density. Table~\ref{tab:detectability} classifies the principal
+solar radio event types by their typical flux levels and evaluates the
+detection significance against the simulation's sensitivity floor
+($\Delta S_{\rm min}\approx\SI{0.058}{\sfu}$ for \texttt{INTEGRATION\_BINS}$=50$,
+from Table~\ref{tab:snr-bins}). The quiet-Sun and burst flux values are
+order-of-magnitude reference figures, not measurements specific to 20~March~2025:
+they are drawn from the classical solar radio burst classification
+literature~\citep{wild1963,dulk1985,mclean1985} and from directly reported
+610~MHz values in~\citet{marque2018}, who cite a NOAA-reported peak flux of
+$\sim\SI{1000}{\sfu}$ at \SI{610}{\mega\hertz} for a moderate event (the basis
+for the ``Type~III (moderate)'' row) and a quiet-Sun flux of $\SI{75}{\sfu}$ at
+the nearby decimetric frequency of \SI{1060}{\mega\hertz}. The quiet-Sun entry
+of $\sim\SI{100}{\sfu}$ used throughout this chapter is accordingly a round,
+slightly conservative reference value rather than a precise measurement: the
+actual 20~March~2025 record (Fig.~\ref{fig:sws-flux} of Chapter~\ref{ch:pipeline})
+shows a quieter baseline of approximately $\SIrange{65}{70}{\sfu}$, consistent with
+this literature anchor. Because $\Delta S_{\rm min}$ is more than three orders of
+magnitude below either figure, this choice of reference value has no effect on
+the detectability conclusions below.
+
+\begin{table}[H]
+  \centering
+  \caption[Solar event detectability at 610~MHz versus simulation noise floor]{Solar event detectability at 610~MHz versus simulation noise floor.\\[4pt]
+  Representative solar radio event types are classified by their typical flux
+  density at \SI{610}{\mega\hertz} and compared against the simulation's
+  minimum detectable flux ($\Delta S_{\rm min}\approx0.058$~SFU for 50 dumps).
+  Flux levels are order-of-magnitude reference values from
+  \citet{wild1963,dulk1985,mclean1985,marque2018}, not measurements from the
+  specific transit simulated in this thesis (see text). All event categories,
+  including the quiet Sun at $\approx100$~SFU, are detectable at extremely high
+  significance in a single integration dump. Type~III and Type~II bursts exceed
+  the noise floor by factors of $10^4$--$10^5$.}
+  \label{tab:detectability}
+  \renewcommand{\arraystretch}{1.3}
+  \begin{tabularx}{\textwidth}{l c c >{\raggedright\arraybackslash}X}
+    \toprule
+    \textbf{Event type} & \textbf{Typical flux (SFU)} & \textbf{SNR (1 dump)} & \textbf{Detectability} \\
+    \midrule
+    Quiet Sun               & $\sim$100           & $\sim$1\,700  & Always detected \\
+    Low-level active region & $\sim$300           & $\sim$5\,200  & Easily detected \\
+    Type~III (moderate)     & $\sim$1\,000        & $\sim$17\,200 & Strongly detected \\
+    Type~III (intense)      & $\sim$10\,000       & $\sim$172\,000& Scale-saturating \\
+    Type~II (shock)         & 500-5\,000         & 8\,600-86\,000 & Time-extended \\
+    Type~IV (continuum)     & $\sim$200-1\,000   & 3\,400-17\,200 & Detected with high confidence \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+All event categories in Table~\ref{tab:detectability} are detectable at extremely
+high significance in a single integration dump. The quiet Sun itself-the weakest
+source in the table-registers at SNR $\approx1\,700$ per dump. This confirms that,
+under the simulated receiver assumptions and when driven by the Learmonth
+\SI{610}{\mega\hertz} flux record, quiet-Sun and burst-level fluxes are well above
+the model noise floor, and that any Type~II or Type~III burst occurring during the
+transit would be unmistakable under the model's assumptions.
+
+\subsection{Dynamic Range of the Dirty Image}
+
+The dynamic range (DR) of a dirty image is the ratio of the peak brightness to the
+RMS of the off-source background, using the same definition as the array-geometry
+sweep of Chapter~\ref{ch:pipeline}:
+\begin{equation}
+  \mathrm{DR} = \frac{I^D_{\rm peak}}{\sigma_{I^D}}.
+  \label{eq:dynamic-range}
+\end{equation}
+For the compact east-west array (Case~1), the dominant image artefact is not
+thermal noise but the north-south elongation of the dirty beam: the PSF peak
+sidelobe is a significant fraction of the main-lobe amplitude, and it appears
+as a systematic stripe rather than as random noise. Consequently, the image DR
+is limited by the PSF sidelobe level rather than by receiver noise, echoing the
+layout-versus-sensitivity trade-off already noted in Section~\ref{sec:sweep}.
+Additional integration time does not help in this regime; only more baselines
+(better UV coverage) or deconvolution (\textsc{clean}) can improve it.
+Transitioning to the graded-cross layout (baselines to \SI{130}{\metre},
+Section~\ref{sec:sweep}) increases the image DR by approximately
+$20~\si{dB}$ because the more uniform 2D UV coverage suppresses PSF sidelobes
+and eliminates the elongation artefact. This is the quantitative motivation for the
+array upgrade discussed in the Conclusion.
+
+\subsection{Interferometric Advantage for Burst Localisation}
+
+A total-power (single-dish) radiometer can detect a burst but cannot localise it
+on the solar disk. The compact interferometer adds a spatial dimension: the
+fringe amplitude on the \SI{24}{\metre} baseline is sensitive to structures larger than
+$\lambda/b\approx1.2^\circ$, larger than the solar diameter ($0.53^\circ$), meaning the
+compact array detects but cannot resolve solar disk structure.
+Although the compact east-west array cannot image the full disk, it can
+distinguish between a burst originating at the disk centre (maximum fringe
+amplitude) and one at the limb (reduced amplitude due to partial resolution). The
+extended graded cross, reaching \SI{130}{\metre}, reduces the resolution element
+to $\lambda/b_{\rm max}\approx0.22^\circ$, sufficient to localise a burst to a
+fraction of the solar radius. Table~\ref{tab:detectability} and the dynamic-range
+analysis together define the sensitivity envelope within which such localisation is
+possible, and reinforce that the graded-cross layout of Section~\ref{sec:sweep} is
+the one that best supports future burst-localisation science.
+
+% ---------------------------------------------------------------------
+\section{Antenna-Beam Fidelity and Its Effect on the Transit Power Profile}
+\label{sec:beam-fidelity}
+
+The sensitivity results of Section~\ref{sec:snr-analysis} assumed a specific primary
+beam model. This section asks whether that choice matters: for a simulation that is
+to be compared with real field measurements, the primary beam model must be accurate
+at large zenith angles, not just at boresight. A common simplification, used by
+several simplified aperture-synthesis simulators including \textsc{APSYNSIM}
+(discussed in Section~\ref{sec:apsynsim}), is the Rayleigh-criterion Gaussian
+approximation,
+\begin{equation}
+  B(\theta) = \exp\!\left(-\frac{\theta^2}{2\sigma_B^2}\right),
+  \quad
+  \sigma_B = \frac{1}{2.3548}\cdot\frac{1.22\,\lambda}{D_{\rm ap}},
+  \label{eq:gauss-beam}
+\end{equation}
+where $D_{\rm ap}$ is the antenna aperture diameter (not to be confused with the
+directivity $D$ of Eq.~\eqref{eq:directivity} in Chapter~\ref{ch:theory}) and
+$\lambda$ is the wavelength. This captures the
+main-lobe width but ignores all sidelobe structure, impedance-mismatch effects, and
+the frequency-dependent evolution of the beam. Three specific failures of
+Eq.~\eqref{eq:gauss-beam}, evaluated against the real 4NEC2 Yagi pattern of
+Chapter~\ref{ch:antenna}, are relevant to this thesis.
+
+\paragraph{Incorrect roll-off.}
+The Gaussian falls to zero much faster than the real Yagi pattern at angles beyond
+the main lobe. As shown in Table~\ref{tab:beam-comparison}, at
+$\theta_z=60^\circ$ the Gaussian predicts only $0.063$ of the boresight response,
+while the real 4NEC2 pattern retains $0.180$-a factor of $2.9\times$ higher.
+Integrated over the 12-hour spring-equinox transit this discrepancy causes the
+Gaussian to underestimate the total accumulated signal energy by approximately
+$25\,\%$ ($\sim\!1~\si{dB}$), which would appear as a systematic flux-calibration
+error in any power comparison with the field hardware.
+
+\paragraph{Missing sidelobe contribution.}
+A well-optimised Yagi has a first sidelobe approximately $13~\si{dB}$ below the
+main lobe. When the Sun enters the first sidelobe (near the horizon at transit
+edges), the Gaussian predicts essentially zero response. The 4NEC2 pattern retains
+a non-zero response that would appear as a ghost fringe at a slightly different phase
+than the main-lobe fringe-a signature that the Gaussian model would miss entirely.
+
+\paragraph{No backlobe.}
+The 4NEC2 simulation shows a back-hemisphere response of approximately
+$-25~\si{dB}$ relative to the main lobe. While this is too faint to affect
+calibration materially in a ground-mounted configuration, it becomes relevant if the
+element is tilted or if a ground-plane reflection is to be included.
+
+\begin{table}[H]
+  \centering
+  \caption[Gaussian versus 4NEC2 beam response at representative solar zenith angles]{Gaussian versus 4NEC2 beam response at representative solar zenith angles.\\[4pt]
+  The normalised power response $A_n(\theta_z)$ is compared between the
+  Rayleigh-criterion Gaussian approximation (Eq.~\eqref{eq:gauss-beam}) and
+  the real 4NEC2 Yagi pattern at six zenith angles spanning the 12-hour
+  transit. Both models share the same $52^\circ$ HPBW and agree to within
+  3\% near transit; the ratio grows to $2.86\times$ at the $60^\circ$ horizon
+  limit, where the Gaussian substantially underestimates the true beam
+  response, leading to a systematic $\approx25\%$ ($\approx1$~dB) underestimate
+  of integrated transit power.}
+  \label{tab:beam-comparison}
+  \renewcommand{\arraystretch}{1.3}
+  \begin{tabular}{c c c c c}
+    \toprule
+    $\boldsymbol{\theta_z}$ & \textbf{Hour angle} & \textbf{Gaussian} $A_n$
+      & \textbf{4NEC2} $A_n$ & \textbf{Ratio (4NEC2/Gauss)} \\
+    \midrule
+    $0^\circ$  & $0^\circ$ (transit) & 1.000 & 1.000 & 1.00 \\
+    $10^\circ$ & $\pm15^\circ$       & 0.938 & 0.965 & 1.03 \\
+    $20^\circ$ & $\pm30^\circ$       & 0.761 & 0.810 & 1.06 \\
+    $30^\circ$ & $\pm45^\circ$       & 0.532 & 0.620 & 1.17 \\
+    $45^\circ$ & $\pm64^\circ$       & 0.243 & 0.390 & 1.60 \\
+    $60^\circ$ & $\pm84^\circ$       & 0.063 & 0.180 & 2.86 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+The most directly quantifiable impact is on the transit-averaged signal power
+$\overline{P}_{\rm sim}$ (Eq.~\eqref{eq:pavg-sim}, used in Section~\ref{sec:real-comparison}).
+The real beam predicts approximately $25\,\%$ more integrated energy over the
+12-hour transit than the Gaussian approximation at the same peak gain. This
+$\sim\!1~\si{dB}$ difference is the primary reason why the real 4NEC2 pattern, rather
+than Eq.~\eqref{eq:gauss-beam}, was used throughout this thesis. Computationally, the
+real beam adds negligible overhead: the \texttt{RegularGridInterpolator} evaluates the
+pre-loaded $({\theta},{\phi})$ grid at any query point in sub-millisecond time, so there
+is no performance argument for retaining the Gaussian approximation.
+
+% ---------------------------------------------------------------------
+\section{Comparison with Educational Simulators: \textsc{APSYNSIM}}
+\label{sec:apsynsim}
+
+The preceding sections validated the pipeline and used it for design and sensitivity
+studies. Before turning to the hardware comparison, it is useful to place the
+simulation environment in context against existing open-source aperture-synthesis
+tools, so that the contribution of this work is clear. The most widely used such tool
+is \textsc{APSYNSIM} (Aperture Synthesis Simulator), developed by
+Mart\'i-Vidal at the Onsala Space Observatory for the Nordic ALMA Regional Centre
+Interferometry School~\cite{apsynsim}.
+
+\subsection{Overview and Feature Comparison}
+
+\textsc{APSYNSIM} is a Python/Tkinter graphical application in which the user places
+antennas interactively on a canvas and observes, in real time, how the UV-plane
+coverage, the dirty beam, and the dirty image respond as elements are added, removed,
+or repositioned. The tool ships with a library of well-known array configurations
+(VLA, ALMA, WSRT, Golay, Golomb) and source templates (point sources, Gaussians,
+uniform disks) and includes a H\"ogbom \textsc{clean}~\citep{hogbom1974} implementation for basic
+deconvolution demonstration. As a classroom and workshop tool it is highly effective:
+it builds the intuition that connects array layout to image quality without requiring
+any knowledge of signal processing or calibration pipelines. Its design is,
+however, deliberately simplified at the physics level: the primary beam is the
+Rayleigh-criterion Gaussian of Eq.~\eqref{eq:gauss-beam} (Section~\ref{sec:beam-fidelity}),
+which ignores sidelobe structure and impedance-mismatch effects, and the noise model
+is an empirical Gaussian random vector scaled by a sensitivity parameter with no
+reference to system temperature, bandwidth, or the Nyquist-Johnson relation. Real
+observational data cannot be ingested; \textsc{APSYNSIM} operates exclusively on
+synthetic source models.
+
+Table~\ref{tab:apsynsim-comparison} summarises the resulting feature comparison.
+
+\begin{table}[H]
+  \centering
+  \caption[Feature comparison: \textsc{APSYNSIM} versus this work's simulation pipeline]{Feature comparison: \textsc{APSYNSIM} versus this work's simulation pipeline.\\[4pt]
+  The comparison covers interface, antenna beam model, noise treatment, data
+  ingestion, coordinate geometry, hardware quantisation, batch processing,
+  field validation, deconvolution, and reproducibility.}
+  \label{tab:apsynsim-comparison}
+  \renewcommand{\arraystretch}{1.35}
+  \begin{tabularx}{\textwidth}{l X X}
+    \toprule
+    \textbf{Aspect} & \textbf{\textsc{APSYNSIM}} & \textbf{This Work} \\
+    \midrule
+    Interface
+      & GUI only (Tkinter); not scriptable; not batch-processable
+      & Jupyter notebook; fully scriptable; headless execution supported \\
+    Antenna beam model
+      & Rayleigh-criterion Gaussian (Eq.~\eqref{eq:gauss-beam})
+      & Real 4NEC2 Yagi pattern from \texttt{.npz};
+        bilinear \texttt{RegularGridInterpolator} \\
+    Noise model
+      & Empirical Gaussian: $\sigma_n \propto N_{\rm bas}^{-1/2}$; no physical basis
+      & Johnson-Nyquist~\citep{nyquist1928}: $P_n = k_B T_{\rm sys}\Delta\nu$; thermodynamically grounded \\
+    System temperature
+      & Not modelled
+      & $T_{\rm sys} = \SI{150}{\kelvin}$ (configurable per deployment) \\
+    Receiver chain
+      & None
+      & Full Friis chain: $P_{\rm sig}=\tfrac{1}{2}A_e A_n(\theta_z) S_\nu \Delta\nu$ \\
+    Data ingestion
+      & Synthetic sky models only (\texttt{.model} parameter files)
+      & Real archived SWS Learmonth \SI{610}{\mega\hertz} solar flux \\
+    Coordinate geometry
+      & Implicit; ENU positions entered directly
+      & Explicit ENU $\rightarrow$ XYZ $\rightarrow$ $\uvw$~\citep{tms2017} \\
+    Hardware quantisation
+      & None
+      & 16-bit IQ hex; LSB $\geq 3$ noise-floor validation for FPGA \\
+    Batch processing
+      & Not supported (interactive only)
+      & 5-layout automated sweep; \texttt{.npz} + PNG export per geometry \\
+    Field validation
+      & None
+      & Cross-validated vs 2-element analogue array at Xuan~Mai \\
+    Deconvolution
+      & H\"ogbom \textsc{clean} (interactive mask editing)
+      & Not the focus; dirty image used as the analytic benchmark \\
+    Reproducibility
+      & Manual (session-dependent)
+      & Full: \texttt{.ipynb} re-run reproduces every figure deterministically \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{Noise Model: Physical Derivation versus Ad-Hoc Scaling}
+
+The difference in noise treatment is central to the comparison. In
+\textsc{APSYNSIM}, the noise added to each visibility is a free parameter
+that the user scales until the image looks plausible; doubling $T_{\rm sys}$ or
+halving the bandwidth has no effect because neither quantity exists in the model.
+In the present pipeline the noise power derives from first principles: for a
+receiver at system temperature $T_{\rm sys}$ terminated into resistance $R_{\rm load}$
+over bandwidth $\Delta\nu$, the RMS magnitude of the complex Johnson-Nyquist~\citep{nyquist1928}
+noise voltage at the load is
+\begin{equation}
+  V_{\rm noise} = \sqrt{k_B\,T_{\rm sys}\,\Delta\nu\,R_{\rm load}} = \sqrt{2}\,\sigma_n,
+  \label{eq:johnson-rms}
+\end{equation}
+where $\sigma_n$ is the per-quadrature noise standard deviation already defined by
+Eq.~\eqref{eq:noise-sigma} of Chapter~\ref{ch:pipeline}. For the simulation parameters
+($T_{\rm sys}=\SI{150}{\kelvin}$, $\Delta\nu=\SI{1}{\mega\hertz}$,
+$R_{\rm load}=\SI{75}{\ohm}$), $V_{\rm noise}\approx\SI{0.39}{\micro\volt}$ - a
+thermodynamic lower bound, not a tunable parameter. Because the signal voltage
+$V_{\rm rms}$ (Eq.~\eqref{eq:vrms} of Chapter~\ref{ch:theory}) is also computed from
+the Friis chain using the real flux, the ratio $V_{\rm rms}/V_{\rm noise}$ is a
+physically meaningful per-sample signal-to-noise ratio, a quantity that
+\textsc{APSYNSIM} cannot produce.
+
+\subsection{Workflow and Reproducibility}
+
+\textsc{APSYNSIM} is designed for a single operator running one configuration
+interactively: a new array geometry requires manually repositioning elements on the
+GUI canvas, reselecting a source model, and reading beam and image quality off the
+screen, with no guarantee that two sessions used identical settings. This is
+appropriate for teaching but constrains scientific use, where exploring many dates,
+baselines, and array geometries - potentially dozens of configurations in a single
+study - is routine. In the present pipeline, every parameter is declared once in a
+single configuration cell (Chapter~\ref{ch:pipeline}), and changing the observation
+date or array layout requires editing only that cell before re-running the notebook
+top to bottom. The parametric sweep of Section~\ref{sec:sweep} demonstrates the
+result directly: five array geometries were processed automatically, with $uv$
+coverage, dirty beams, and dirty images exported without manual intervention.
+Table~\ref{tab:workflow-compare} summarises the resulting difference in workflow for a
+representative multi-geometry, multi-date design study.
+
+\begin{table}[H]
+  \centering
+  \caption[Workflow comparison: \textsc{APSYNSIM} versus this work's pipeline]{Workflow comparison: \textsc{APSYNSIM} versus this work's pipeline.\\[4pt]
+  A typical instrument-design study covering five array geometries on two
+  observation dates. Steps include specifying the array, loading source data,
+  setting observation parameters, running the simulation, exporting results,
+  reproducing results later, and changing the observation date.}
+  \label{tab:workflow-compare}
+  \renewcommand{\arraystretch}{1.3}
+  \begin{tabularx}{\textwidth}{l X X}
+    \toprule
+    \textbf{Step} & \textbf{\textsc{APSYNSIM}} & \textbf{This Work} \\
+    \midrule
+    Specify array
+      & Click antenna positions on GUI canvas (manual, session-by-session)
+      & Edit one list of ENU coordinates in Cell~0; or call a preset function \\
+    Load source data
+      & Select from built-in menu; adjust Gaussian parameters interactively
+      & Automatic: \texttt{sws.load\_day(NGAY)} reads real flux from file \\
+    Set observation parameters
+      & Adjust GUI sliders for latitude, HA, declination, wavelength
+      & Edit 2-3 variables in Cell~0; all cells inherit automatically \\
+    Run simulation
+      & Immediate (GUI redraws on each mouse event)
+      & Run all cells: $<\SI{2}{\minute}$ for 50\,000 samples \\
+    Export results
+      & Screenshot / manual FITS save (APSYNTRUE only)
+      & Automatic: \texttt{.npz} + PNG per geometry, summary \texttt{.txt} \\
+    Reproduce later
+      & Re-run manually; no guaranteed parameter record
+      & Re-execute \texttt{.ipynb}; identical results guaranteed \\
+    Change observation date
+      & Full manual re-setup required
+      & Edit \texttt{NGAY} and \texttt{DEC\_SUN\_DEG} in Cell~0; re-run \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+Because all parameters live in one cell, a parameter sensitivity study is
+similarly straightforward: changing $T_{\rm sys}$ from \SI{150}{\kelvin} to
+\SI{200}{\kelvin} reduces the per-dump SNR by $\approx1.2~\si{dB}$, and changing
+\texttt{LAT\_DEG} to $-26.7^\circ$ would simulate the Murchison Radio-astronomy
+Observatory with the ENU$\rightarrow$XYZ rotation and transit window updating
+automatically. None of these changes requires modifying more than one or two lines of
+code, and none are possible in a GUI-only tool without full manual re-interaction.
+This scriptability, rather than any single figure of merit, is what separates the
+present pipeline from an educational visualisation tool and makes it usable as a
+design instrument for the studies in Sections~\ref{sec:sweep}-\ref{sec:beam-fidelity}.
+A companion browser-based interface that packages these same outputs into an
+accessible, zero-installation viewer, without introducing any new physical model, is
+described in the Appendix (Project Repository and Simulation Guide).
+
+% ---------------------------------------------------------------------
+\section{Limitations of the Current Implementation}
+\label{sec:limitations}
+
+The validation, design, and sensitivity results above establish confidence in the
+pipeline, but that confidence is bounded by a specific set of simplifications. For
+completeness, the principal simplifications and their expected impact on results
+are listed below; each is revisited as a concrete extension in the Future Work
+section of the Conclusion.
+
+\begin{enumerate}[leftmargin=1.8em]
+  \item \textbf{Single spectral channel.} The simulation models a single
+        $\SI{1}{\mega\hertz}$ channel at $\SI{610}{\mega\hertz}$. Bandwidth
+        smearing-which causes decorrelation at angular offsets from the phase
+        centre proportional to $\Delta\nu/\nu$-is not modelled. For
+        $\Delta\nu/\nu = 10^6/610\times10^6 \approx 1.6\times10^{-3}$ and
+        baselines below $\SI{130}{\metre}$, the smearing at a $0.5^\circ$ offset
+        is $\lesssim2\,\%$ of the fringe amplitude, which is negligible for the
+        present validation study.
+  \item \textbf{No ionospheric phase screen.} Differential ionospheric
+        phase between antennas scales as $\Delta\phi \approx \Delta{\rm TEC}/\nu^2$,
+        where $\Delta{\rm TEC}$ is the differential total electron content. For
+        baselines below $\SI{130}{\metre}$ at $\SI{610}{\mega\hertz}$, the expected
+        differential phase is $\lesssim1^\circ$ during undisturbed conditions, which
+        is below the current precision requirement.
+  \item \textbf{Independent-element assumption.} The mutual-coupling study of
+        Chapter~\ref{ch:antenna} showed coupling below $-78~\si{dB}$ beyond
+        $\SI{8}{\metre}$. No Jones-matrix correction is applied even at the shortest
+        $\SI{8}{\metre}$ baseline, where the coupling could in principle contribute
+        a $\sim10^{-4}$ fractional amplitude error-far below any other error source.
+  \item \textbf{No deconvolution.} The imaging chain produces a dirty image.
+        \textsc{clean} or a compressed-sensing solver would be required to recover
+        the true sky brightness and to achieve noise-limited dynamic range.
+  \item \textbf{Narrow-field assumption.} The DFT imaging assumes a flat sky
+        (small $w$-term). The solar diameter ($0.53^\circ$) is well within the
+        regime where the $w$-approximation is valid for baselines below
+        $\SI{130}{\metre}$, but extension to wider fields or longer baselines would
+        require $w$-projection.
+  \item \textbf{Perfect clock synchronisation.}
+        The voltage model of Eq.~\eqref{eq:vk} applies a common, deterministic
+        time axis to all antennas (\texttt{CLOCK\_OFFSET\_NS}$=[0,0,0,0]$~ns).
+        In real hardware each digitiser runs on its own oscillator; a differential
+        clock drift $\xi$ between any two antennas adds a time-varying
+        phase to their shared visibility and can reduce the time-averaged fringe
+        amplitude to zero within a single integration dump-independently of SNR.
+        A quantitative sensitivity study is presented in
+        Section~\ref{sec:clock-offset}.
+\end{enumerate}
+
+% ---------------------------------------------------------------------
+\section{Diagnostic Comparison with Field Measurement}
+\label{sec:real-comparison}
+
+The preceding sections verify the simulation against \emph{analytic} predictions
+(fringe period, $\jinc$ visibility, PSF identity) and use it for design and
+sensitivity studies. This section asks a different, harder question: how does the
+simulation compare with an actual hardware recording? It extends the comparison
+to an \emph{experimental} recording from the two-element analogue interferometer
+deployed at Hoa~Lac on 20~March~2025-the same date used throughout this chapter.
+What is compared is deliberately narrow: the gain-independent solar excess above the
+noise floor, not the raw voltage waveform, a phase-coherent visibility, or a
+calibrated image, since the hardware gain chain was not independently calibrated end
+to end. This comparison is therefore a \emph{hardware sanity check}, not a full
+end-to-end validation.
+
+\subsection{Digital versus Analogue Interferometry}
+
+In \emph{analogue interferometry} the two antenna signals are combined at radio
+frequency by a coaxial power combiner. The combined signal drives a broadband power
+detector; the output is a slowly varying DC voltage proportional to the total received
+power including the fringe modulation. The phase relationship between the two signals
+is fixed by the physical cable lengths and the geometry of the array; it cannot be
+adjusted post-detection. The instrument is a correlating radiometer realised entirely
+in hardware.
+
+In \emph{digital interferometry} (the approach of this thesis) the two signals are
+digitised independently as complex IQ baseband voltages. The cross-correlation is
+computed in software, allowing arbitrary post-processing: fringe stopping, phase
+calibration, baseline selection, and imaging. The key advantage is that a single
+recording can be reprocessed with different array parameters, different imaging
+algorithms, or additional baselines added later, without any physical change to the
+hardware.
+
+\subsection{Average Power on 20~March~2025}
+
+The simulation computes the beam-weighted transit-average signal power over the
+observation window $|H|\leq30^\circ$ (approximately 10:00-14:00 local time,
+matching the hardware recording window):
+\begin{equation}
+  \overline{P}_{\rm sim} = \frac{1}{N}\sum_{n=0}^{N-1}
+    S_\nu(t_n)\,A_e\,A_n\!\bigl(\theta_z(t_n)\bigr)\,\Delta\nu,
+  \label{eq:pavg-sim}
+\end{equation}
+where $A_n(\theta_z)$ is the normalised power beam pattern from the 4NEC2 simulation
+(Section~\ref{sec:beam-fidelity}). Because the absolute power at the hardware receiver
+port depends on the unknown total gain of the analogue chain (LNA, cables,
+downconverter), a direct watt-to-watt comparison is not feasible without an
+end-to-end gain calibration. Instead, the comparison uses the \emph{solar excess above
+the thermal noise floor},
+\begin{equation}
+  \mathcal{E} = 10\log_{10}\!\left(1 + \frac{\overline{P}_{\rm sim}}{P_n}\right)
+  \quad[\mathrm{dB}],
+  \label{eq:excess}
+\end{equation}
+where $P_n$ is the Johnson-Nyquist noise power of Eq.~\eqref{eq:johnson} in
+Chapter~\ref{ch:theory}. This quantity is gain-independent: any common
+multiplicative factor in the hardware chain cancels between signal and noise,
+leaving only the ratio $\overline{P}_{\rm sim}/P_n$.
+From the hardware trace recorded at Hoa~Lac on 20~March~2025, the corresponding
+measurement is read directly as the difference between the transit envelope peak and
+the pre-transit noise baseline (both in the same dB scale of the recording).
+
+Table~\ref{tab:power-comparison} compares $\mathcal{E}$ from simulation and measurement.
+
+\begin{table}[H]
+  \centering
+  \caption[Solar excess for 20~March~2025: simulation versus hardware measurement]{Solar excess for 20~March~2025: simulation versus hardware measurement.\\[4pt]
+  The solar excess $\mathcal{E}$ (Eq.~\eqref{eq:excess}) is the ratio of
+  time-averaged signal power to the thermal noise floor, expressed in dB.
+  Simulation: 4NEC2 beam model, archived SWS Learmonth flux,
+  $T_{\rm sys}=\SI{150}{\kelvin}$, transit window $|H|\leq30^\circ$.
+  Hardware: two-element Yagi analogue interferometer at Hoa~Lac on
+  20~March~2025, operated without a dedicated low-noise amplifier.
+  The factor-of-$23.8\times$ SNR gap implies an effective hardware system
+  temperature of approximately \SI{3600}{\kelvin}.}
+  \label{tab:power-comparison}
+  \renewcommand{\arraystretch}{1.3}
+  \begin{tabularx}{\textwidth}{l c >{\raggedright\arraybackslash}X}
+    \toprule
+    \textbf{Source} & \textbf{Solar excess $\mathcal{E}$ (dB)} & \textbf{Notes} \\
+    \midrule
+    Simulation (this work)
+      & $0.586$
+      & Eq.~\eqref{eq:excess}; $\overline{P}_{\rm sim}/P_n=14.3\,\%$ \\
+    Hardware (Hoa~Lac, 20 Mar 2025)
+      & $0.026$
+      & Peak envelope minus baseline; $P_{\rm sig}/P_n=0.60\,\%$ \\
+    Ratio (linear SNR)
+      & $23.8\times$
+      & Implies $T_{\rm sys,eff}\approx\SI{3600}{\kelvin}$ \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{Interpretation}
+
+Table~\ref{tab:power-comparison} reveals a factor of $23.8\times$ between the
+simulated and measured solar excess. This discrepancy is not evidence against the
+Friis model; it is best read as a measurement of the \emph{effective system
+temperature gap} between the idealised pipeline ($T_{\rm sys}=\SI{150}{\kelvin}$) and
+the real consumer-grade hardware. The real receiver is a software-defined radio (SDR)
+tuner connected through passive coaxial splitters and cables, with no dedicated
+low-noise amplifier (LNA), so its effective system temperature is set mainly by the
+receiver noise figure $\mathrm{NF}$ and cable loss rather than by the antenna or sky
+temperature. A typical RTL-SDR at \SI{610}{\mega\hertz} has
+$\mathrm{NF}\approx8$--$12~\si{\decibel}$, corresponding to a receiver noise
+temperature $T_{\rm rx}=(10^{\mathrm{NF}/10}-1)\,T_0\approx1\,500$--$4\,300~\si{\kelvin}$
+for a reference temperature $T_0=\SI{290}{\kelvin}$; a few decibels of cable loss
+raise this further, into the same thousands-of-kelvin range obtained by inverting the
+measured ratio of Table~\ref{tab:power-comparison} directly:
+\begin{equation}
+  T_{\rm sys,eff} = T_{\rm sys,model}
+    \times\frac{(\overline{P}_{\rm sim}/P_n)_{\rm sim}}
+               {(\overline{P}_{\rm sig}/P_n)_{\rm meas}}
+  = 150\times23.8 \approx \SI{3\,600}{\kelvin},
+  \label{eq:tsys-backcalc}
+\end{equation}
+which is the effective system temperature used in the remainder of this section, and
+is fully consistent with SDR hardware operating at UHF without an LNA and with
+typical cable losses of $2$-$4~\si{\decibel}$.
+
+This comparison is therefore consistent with the signal-level model used throughout
+the simulation, and is corroborated independently by the fringe-period and
+$\jinc$-visibility benchmarks of Sections~\ref{sec:fringe-results}
+and~\ref{sec:vis-results}: it indicates that the field setup was receiver-noise
+limited, rather than pointing to an error in the Friis chain itself. Replacing the
+consumer SDR with an LNA of noise figure $\lesssim\SI{1}{\decibel}$
+($T_{\rm rx}\approx\SI{75}{\kelvin}$) would reduce $T_{\rm sys,eff}$ to
+$\approx\SI{300}{\kelvin}$ and increase the measured solar excess to
+$\approx0.026\times(3\,600/300)\approx\SI{0.31}{\decibel}$, an improvement of
+$12\times$ in SNR, comparable to the simulation model. Beyond total power, the
+digital pipeline recovers information inaccessible to the analogue chain: the
+$\sim$14-minute fringe modulation and the $\jinc$-shaped visibility amplitude versus
+baseline length. This comparison - total power envelope (analogue, broad bell curve)
+versus fringe pattern and visibility (digital) - is the clearest demonstration of the
+complementary value of digital interferometry for solar burst science, provided the
+receiver-noise and clock-coherence gaps identified here and in
+Section~\ref{sec:clock-offset} are closed.
+
+% ---------------------------------------------------------------------
+\section{Clock-Coherence Requirement}
+\label{sec:clock-offset}
+
+Section~\ref{sec:real-comparison} attributed the $23.8\times$ SNR gap to receiver
+system temperature alone. This section asks whether that is the only barrier: the
+voltage model of Chapter~\ref{ch:pipeline} treats all antennas as sharing a perfect
+common clock (\texttt{CLOCK\_OFFSET\_NS}$=[0,0,0,0]$~ns). Using the clock-offset
+injection facility (Eq.~\eqref{eq:clock-phase}), this section quantifies how
+realistic oscillator imperfections would degrade interferometric measurements, and
+places the hardware coherence requirement on a quantitative footing.
+
+\subsection{Static Offset: Phase Rotation Without Amplitude Loss}
+
+A static clock offset $\tau_{ij}$ between the digitisers of antennas $i$ and $j$
+introduces a constant phase error on the baseline visibility
+(Eq.~\eqref{eq:vis-clock}):
+\begin{equation}
+  \Delta\phi_{ij} = 2\pi f_c\,\tau_{ij}
+  \;\;\Longrightarrow\;\;
+  \frac{\Delta\phi_{ij}}{1~\mathrm{ns}}
+    = 2\pi\times\SI{610}{\mega\hertz}\times10^{-9}~\mathrm{s}
+    \approx 219.6^\circ\,\mathrm{ns}^{-1}.
+  \label{eq:static-phase}
+\end{equation}
+Table~\ref{tab:clock-static} evaluates Eq.~\eqref{eq:static-phase} for
+representative offsets.
+
+\begin{table}[H]
+  \centering
+  \caption[Static clock offset versus visibility phase error at 610~MHz]{Static clock offset versus visibility phase error at 610~MHz.\\[4pt]
+  A static differential clock offset $\tau_{ij}$ between two digitisers
+  introduces a constant phase rotation $\Delta\phi_{ij}=2\pi f_c\tau_{ij}$
+  on the corresponding baseline visibility; the amplitude is unaffected.
+  At $f_c=\SI{610}{\mega\hertz}$, even a 0.1~ns offset produces a $22^\circ$
+  phase error, sufficient to displace a simulated point source by more than
+  its own diameter along the 8-m baseline direction.}
+  \label{tab:clock-static}
+  \renewcommand{\arraystretch}{1.25}
+  \begin{tabularx}{\textwidth}{c c >{\raggedright\arraybackslash}X}
+    \toprule
+    \textbf{Offset $\tau_{ij}$} & \textbf{Phase error $\Delta\phi_{ij}$}
+      & \textbf{Dirty-image effect} \\
+    \midrule
+    $0$~ns    & $0^\circ$    & No effect; phase centre correct \\
+    $0.1$~ns  & $22^\circ$   & Mild apparent source position shift \\
+    $0.5$~ns  & $110^\circ$  & Source displaced along baseline direction \\
+    $1$~ns    & $220^\circ$  & Large position error; image artefacts \\
+    $1.64$~ns & $360^\circ$  & Full phase cycle; source wraps to original position \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+A static phase error shifts the apparent source position along the baseline
+direction by $\Delta\theta\approx\Delta\phi_{ij}/(2\pi\,b_{ij}/\lambda)$. For the
+\SI{8}{\metre} baseline ($b_{ij}/\lambda\approx16.3$) and a $1$~ns offset
+($\Delta\phi_{ij}\approx3.83$~rad), this gives $\Delta\theta\approx2.1^\circ$-larger
+than the solar diameter ($0.53^\circ$): a single-nanosecond timing error places the
+simulated Sun at the wrong sky position by nearly four solar diameters. Static offsets
+can be removed by a point-source phase calibration, but only if a suitable calibrator
+transit is available.
+
+\subsection{Clock Drift: Fringe Washing and the Coherence Time}
+
+A more fundamental degradation arises when the two oscillators run at slightly
+different \emph{rates}. Let $\xi$ (dimensionless, in parts per million, ppm)
+be the fractional frequency offset between the digitisers of antennas $i$ and $j$ -
+not to be confused with the stochastic source process $\varepsilon(t)$ of
+Eq.~\eqref{eq:vk} in Chapter~\ref{ch:pipeline}, which is an unrelated quantity. The
+differential delay then grows as $\tau_{ij}(t)=\tau_{ij}(0)+\xi\,t$, and the
+instantaneous visibility phase advances continuously. Time-averaging over one
+integration dump of duration $\Delta t_{\mathrm{dump}}=\SI{43.2}{\second}$ reduces the
+fringe amplitude by the coherence factor
+\begin{equation}
+  \eta_{\mathrm{coh}}
+  = \left|\operatorname{sinc}\!\bigl(f_c\,\xi\,\Delta t_{\mathrm{dump}}\bigr)\right|,
+  \label{eq:coherence}
+\end{equation}
+where $\operatorname{sinc}(x)\equiv\sin(\pi x)/(\pi x)$, falling to zero (complete
+fringe washing) when $f_c\,\xi\,\Delta t_{\mathrm{dump}}=1$, defining the
+\emph{coherence time}
+\begin{equation}
+  \Delta t_{\mathrm{coh}} = \frac{1}{f_c\,\xi}.
+  \label{eq:tcoh}
+\end{equation}
+
+Table~\ref{tab:clock-drift} evaluates Eqs.~\eqref{eq:coherence} and
+\eqref{eq:tcoh} for oscillator accuracies representative of consumer and
+laboratory hardware at $f_c=\SI{610}{\mega\hertz}$,
+$\Delta t_{\mathrm{dump}}=\SI{43.2}{\second}$.
+
+\begin{table}[H]
+  \centering
+  \caption[Clock drift versus fringe coherence factor at 610~MHz (43.2-s dump)]{Clock drift versus fringe coherence factor at 610~MHz (43.2-s dump).\\[4pt]
+  The fringe coherence factor $\eta_{\rm coh}$ (Eq.~\eqref{eq:coherence})
+  is evaluated as a function of oscillator fractional frequency offset
+  $\xi$ for a 43.2-second integration dump at $f_c=\SI{610}{\mega\hertz}$.
+  Consumer SDR crystals (1~ppm drift) produce complete fringe washing
+  ($\eta_{\rm coh}\approx0$) within a single dump; maintaining
+  $\eta_{\rm coh}>0.9$ requires a GPSDO or equivalent precision oscillator
+  with $\xi\lesssim10$~ppt.}
+  \label{tab:clock-drift}
+  \renewcommand{\arraystretch}{1.25}
+  \begin{tabularx}{\textwidth}{l c c c >{\raggedright\arraybackslash}X}
+    \toprule
+    \textbf{Drift $\xi$} & \textbf{$\Delta t_{\rm coh}$}
+      & \textbf{$f_c\xi\Delta t_{\rm dump}$}
+      & \textbf{$\eta_{\rm coh}$} & \textbf{Oscillator class} \\
+    \midrule
+    $1$~ppm         & $1.6$~ms         & $26\,352$  & $\approx 0$   & Consumer SDR crystal \\
+    $0.1$~ppm       & $16$~ms          & $2\,635$   & $\approx 0$   & TCXO (temperature compensated) \\
+    $1$~ppb         & $1.6$~s          & $26.4$     & $\approx 0$   & OCXO (oven controlled) \\
+    $10$~ppt        & $164$~s          & $0.264$    & $0.88$        & Precision OCXO \\
+    $1$~ppt         & $1\,640$~s       & $0.026$    & $\approx 1$   & GPSDO (GPS-disciplined) \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+The requirement for $\eta_{\mathrm{coh}}>0.9$ over the \SI{43.2}{\second} dump is
+$\xi<10$~ppt ($10^{-11}$), achievable with a GPS-disciplined oscillator
+(GPSDO) or a precision oven-controlled crystal (OCXO) with external \SI{10}{\mega\hertz}
+reference injection. Consumer oscillators-including the crystal in a typical
+RTL-SDR, rated at approximately $0.5$-$1$~ppm-produce
+$\Delta t_{\mathrm{coh}}\lesssim\SI{3}{\milli\second}$, more than four orders of
+magnitude shorter than $\Delta t_{\mathrm{dump}}$: a consumer SDR therefore produces
+zero fringe amplitude within the very first integration dump, regardless of SNR.
+
+\subsection{Implication for the Hardware Comparison}
+
+The clock-offset analysis adds a second, \emph{independent} reason why digital
+cross-correlation with unsynchronised SDRs cannot recover a fringe, alongside the
+system-temperature gap of Section~\ref{sec:real-comparison}: even if
+$T_{\mathrm{sys,eff}}$ were reduced to the idealised \SI{150}{\kelvin} by adding a
+dedicated LNA, the time-averaged fringe amplitude would remain zero because
+$\eta_{\mathrm{coh}}\approx0$ for any consumer oscillator. These two effects are
+therefore complementary barriers, and the minimum hardware specification for digital
+solar interferometry at \SI{610}{\mega\hertz} with \SI{43.2}{\second} dumps requires
+addressing \emph{both} simultaneously:
+\begin{enumerate}[leftmargin=1.8em]
+  \item a low-noise amplifier with noise figure $\lesssim\SI{1}{\decibel}$
+        ($T_{\mathrm{rx}}\approx\SI{75}{\kelvin}$), reducing
+        $T_{\mathrm{sys,eff}}$ from $\approx\SI{3\,600}{\kelvin}$ to
+        $\approx\SI{300}{\kelvin}$; and
+  \item a common clock reference, a GPSDO or a \SI{10}{\mega\hertz}
+        distribution amplifier, injected into all digitiser clock inputs,
+        bringing $\xi$ below $10$~ppt and
+        $\eta_{\mathrm{coh}}>0.9$.
+\end{enumerate}
+Meeting both conditions would increase the measured solar excess from the
+hardware-measured $\mathcal{E}_{\mathrm{meas}}=0.026$~dB to
+$\approx0.026\times(3\,600/300)\times\eta_{\mathrm{coh}}
+\approx\SI{0.31}{\decibel}$, consistent with the simulation prediction of
+$\mathcal{E}_{\mathrm{sim}}=0.586$~dB.
+
+% ---------------------------------------------------------------------
+\section{Chapter Conclusion}
+
+The results of this chapter show that the simulation pipeline is useful not only as a
+numerical demonstration, but as a design tool for a future low-cost solar radio
+interferometer, following the validation-to-deployment logic set out in
+Section~\ref{sec:result-strategy}.
+
+First, the analytic validation tests (Sections~\ref{sec:fringe-results}-\ref{sec:dirty-results})
+confirm that the main signal-processing blocks behave as expected: the simulated
+fringe period verifies the geometric-delay and $\uvw$-coordinate implementation, the
+visibility-amplitude trend verifies that the resolved solar disk is correctly
+represented, and the dirty-image comparison verifies that the imaging stage produces
+the expected sky-convolved-with-PSF result. Together these validate the internal
+consistency of the pipeline and justify using it for the design work that follows.
+
+Second, the array-geometry study (Section~\ref{sec:sweep}) shows why simulation is
+necessary before field deployment. A compact east-west layout can demonstrate
+fringes but gives limited two-dimensional localisation; the graded-cross and
+extended layouts provide better $uv$-coverage and a more useful synthesised beam, but
+also demand more careful calibration and, as Section~\ref{sec:clock-offset} shows,
+clock coherence. The DLITE-inspired triangle-plus-centre alternative (Case~1.75) shows
+that non-redundant $uv$-sampling, not baseline length, is what lets exactly four
+elements recover useful two-dimensional resolution - the same minimum-redundancy
+principle that motivates a future four-element LWA-style deployment. The best antenna
+layout is therefore not determined by baseline length alone, but by the combined
+behaviour of $uv$-coverage, PSF shape, sidelobe level, and practical deployability - a
+conclusion reinforced by the sensitivity and dynamic-range analysis of
+Section~\ref{sec:snr-analysis} and by the beam-fidelity result of
+Section~\ref{sec:beam-fidelity}, where replacing the Gaussian primary beam with the
+real 4NEC2 pattern changes the predicted transit power by $\approx25\,\%$.
+
+Third, the comparative and diagnostic results identify the concrete barriers between
+simulation and measurement. Section~\ref{sec:apsynsim} shows that the pipeline goes
+beyond educational visualisation by combining physically grounded noise, real data
+ingestion, real antenna beams, hardware export, and full reproducibility - the
+capabilities needed to run the design studies above at all. Section~\ref{sec:real-comparison}
+compares the simulated and measured solar excess for 20~March~2025
+($\mathcal{E}_{\rm sim}=0.586$~dB versus $\mathcal{E}_{\rm meas}=0.026$~dB, a
+$23.8\times$ gap in linear SNR) and finds it consistent with an elevated effective
+system temperature in the consumer SDR receiver chain
+($T_{\rm sys,eff}\approx\SI{3\,600}{\kelvin}$); this diagnostic comparison should not
+be read as a full end-to-end hardware validation, which would require an
+independently gain-calibrated measurement. Section~\ref{sec:clock-offset} adds a
+second, independent barrier: a consumer crystal oscillator with
+$\xi\approx1$~ppm gives a coherence time of only $\approx\SI{1.6}{\milli\second}$,
+four orders of magnitude shorter than the \SI{43.2}{\second} dump, so unsynchronised
+digitisers yield zero fringe amplitude regardless of SNR.
+
+The practical outcome of this chapter is therefore a set of deployment
+recommendations rather than a single number: use a calibrated low-noise receiver
+chain ($\mathrm{NF}\lesssim\SI{1}{\decibel}$), distribute a common clock reference
+($\xi<10$~ppt, e.g.\ a GPSDO), preserve the real antenna primary-beam model
+rather than a Gaussian approximation, and choose the array layout based on
+$uv$-coverage and sidelobe behaviour rather than on baseline length alone. These
+recommendations, together with the six limitations of Section~\ref{sec:limitations},
+define the concrete next steps for turning the present detection instrument into a
+working digital solar imaging interferometer.
+\clearpage

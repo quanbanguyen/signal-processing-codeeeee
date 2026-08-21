@@ -1,0 +1,268 @@
+% =====================================================================
+%  APPENDIX A — Project Repository and Simulation Guide
+% =====================================================================
+\clearpage
+\stepcounter{chapter} % give the appendix its own chapter counter value so that
+                       % hyperref anchors for its sections (internally
+                       % section.<chapter>.<n>) do not collide with the
+                       % identically-numbered sections of Chapter 5
+\chapter*{APPENDIX\\[0.3em]PROJECT REPOSITORY AND SIMULATION GUIDE}
+\addcontentsline{toc}{chapter}{APPENDIX: PROJECT REPOSITORY AND SIMULATION GUIDE}
+\setcounter{section}{0}
+\renewcommand{\thesection}{A.\arabic{section}}
+\setcounter{figure}{0}
+\renewcommand{\thefigure}{A.\arabic{figure}}
+
+All source code, data, and figures produced in this thesis are archived in a
+public GitHub repository:
+
+\begin{center}
+  \large
+  \url{https://github.com/quanbanguyen/solar-interferometry-simulation-project}
+  \citep{github_repo}
+\end{center}
+
+\noindent
+The repository contains two independent entry points for exploring the
+simulation: a zero-installation browser tool (\texttt{radio\_sim.html}) for
+interactive visualisation, and a Jupyter notebook
+(\texttt{the\_newest\_heart\_of\_project.ipynb}) for full pipeline execution
+and figure reproduction. Both implement the same physical model described in
+Chapters~\ref{ch:pipeline}--\ref{ch:results}.
+
+% ------------------------------------------------------------------
+\section{Repository Contents}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{l >{\raggedright\arraybackslash}X}
+  \toprule
+  \textbf{File / Folder} & \textbf{Description} \\
+  \midrule
+  \texttt{the\_newest\_heart\_of\_project.ipynb}
+    & Main Jupyter notebook; reproduces every figure and table in
+      Chapters~\ref{ch:pipeline}--\ref{ch:results} from a single top-to-bottom run \\
+  \texttt{radio\_sim.html}
+    & Self-contained browser simulation tool; no installation required \\
+  \texttt{sws\_to\_csv.py}
+    & SWS/RSTN file parser and preprocessor \\
+  \texttt{file\_excel\_du\_lieu/}
+    & Preprocessed daily flux CSV files for multiple observation dates \\
+  \texttt{figures/}
+    & All exported PNG figures referenced in the thesis \\
+  \texttt{beam\_data/}
+    & 4NEC2 Yagi radiation pattern (\texttt{.npz}) used by the pipeline \\
+  \texttt{requirements.txt}
+    & Python package list for reproducing the notebook environment \\
+  \bottomrule
+\end{tabularx}
+\end{center}
+
+% ------------------------------------------------------------------
+\section{Quick Start: Browser Simulation (No Installation Required)}
+\label{sec:appx-html}
+
+The browser tool \texttt{radio\_sim.html} runs entirely inside any modern web
+browser (Chrome, Firefox, Edge) with no server, no Python, and no account
+required. It implements the same physical model as the notebook and exposes
+every key parameter through interactive controls.
+
+\begin{enumerate}[leftmargin=1.8em, label=\textbf{Step \arabic*.}]
+  \item \textbf{Download the file.}
+        Navigate to the repository URL above.  Click the file
+        \texttt{radio\_sim.html} in the file list, then click the download
+        button (downward-arrow icon, top-right of the file preview).  Save it
+        anywhere on the local computer.
+
+  \item \textbf{Open in a browser.}
+        Double-click the saved \texttt{radio\_sim.html} file.  The simulation
+        loads in the default browser within a few seconds.  No internet
+        connection is required after the file is saved.
+
+  \item \textbf{Select a preset.}
+        In the left sidebar, open the \textbf{Preset} dropdown and choose one
+        of the five configurations (Table~\ref{tab:sweep}) to instantly
+        populate all parameters and redraw all plots.
+
+  \item \textbf{Explore interactively.}
+        Use the five tabs on the right to navigate between the solar flux
+        record, UV coverage, fringe pattern, dirty image, and the usage guide.
+        Adjust the frequency slider, declination slider, or array antenna
+        positions to see all plots update in real time.
+
+  \item \textbf{Load real SWS data (optional).}
+        Click the \textbf{Load SWS file} button in the sidebar and select a
+        downloaded Learmonth daily file (plain-text \texttt{.txt} format,
+        available from the BOM Space Weather Services archive~\citep{sws}).
+        The tool parses the file automatically and drives the simulation with
+        the real flux record.
+\end{enumerate}
+
+\subsection{Interface Overview}
+\label{subsec:appx-html-interface}
+
+The browser-based interface is not a separate physical model. It is a
+visualisation companion, developed to complement the Python pipeline of
+Chapter~\ref{ch:pipeline} and support live demonstration of the
+interferometric concepts developed there, without requiring the user to run
+the full Jupyter Notebook environment. The tool runs entirely in the browser
+with no server or installation required, implements the same physical model
+as the notebook (Learmonth site, 610~MHz, spring equinox, compact EW
+default), and exposes every key parameter through interactive controls that
+update all plots in real time.
+
+Figure~\ref{fig:html-tool} shows the interface. The tool is organised as a
+fixed sidebar on the left and five display tabs on the right:
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Solar Flux.} Loads any Learmonth SWS \texttt{.txt} raw file
+  (RSTN HHMMSS format) and renders the daytime flux curve with transit
+  statistics; nighttime tokens (\texttt{//////}) are stripped automatically.
+  A parametric Gaussian envelope is used when no file is loaded.
+
+  \item \textbf{Array \& UV.} Displays the antenna layout in the ENU frame
+  and the $uv$-coverage accumulated over the full observing window
+  $H\in[-90^\circ,+90^\circ]$. Editing antenna coordinates or switching
+  presets triggers an immediate redraw of both panels.
+
+  \item \textbf{Fringe Pattern.} Renders the simulated fringe envelope for every
+  baseline and shows a per-baseline summary table listing $b/\lambda$, fringe
+  period $T_{\rm fringe}$, and angular resolution $\theta$.
+
+  \item \textbf{Image.} On-demand computation and display of the synthesised
+  (dirty) beam and dirty image, with visibility amplitude plotted as a function
+  of baseline length below the image panels.
+
+  \item \textbf{Info.} Operating instructions, the Python conversion snippet for
+  exporting a 4NEC2 beam pattern to the JSON format accepted by the tool, and a
+  quick-reference formula card.
+\end{itemize}
+
+The sidebar provides: (i)~a file picker for the SWS data and a frequency
+selector covering all eight RSTN channels (245--15\,400~MHz); (ii)~an antenna
+position table with five pre-configured presets corresponding exactly to the
+five evaluation cases of Section~\ref{subsec:sweep} of Chapter~\ref{ch:pipeline};
+(iii)~a carrier-frequency slider that shows the effect of changing $\lambda$ on
+fringe period and angular resolution in real time; (iv)~a declination slider
+$\delta\in[-30^\circ,+30^\circ]$ that lets the user observe directly how the
+$uv$-tracks transition from the straight horizontal lines derived in
+Section~\ref{subsec:uv-coverage} of Chapter~\ref{ch:pipeline} (at $\delta=0^\circ$)
+to curved elliptic arcs as $|\delta|$ increases; and (v)~a selectable
+primary-beam model (uniform, Gaussian, $\cos^2$, or a 4NEC2 JSON file).
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{fig_html_tool}
+  \caption[Interactive browser-based visualisation companion
+  (\texttt{radio\_sim.html})]{Interactive browser-based visualisation companion
+  (\texttt{radio\_sim.html}), Array \& UV tab.\\[4pt]
+  Left sidebar: SWS file loader with RSTN frequency selector, antenna
+  configuration table (Case~1 compact EW preset: four antennas at
+  $[0,8,16,24]$~m), and observation parameter controls.  Main area: antenna
+  layout in the ENU plane (top) and the corresponding $uv$-coverage over the
+  12-hour observing window (bottom) for $\delta=0^\circ$, showing the
+  characteristic horizontal-line pattern explained analytically in
+  Section~\ref{subsec:uv-coverage} of Chapter~\ref{ch:pipeline}.  Switching the
+  declination slider away from zero curves the tracks into elliptic arcs in
+  real time.}
+  \label{fig:html-tool}
+\end{figure}
+
+% ------------------------------------------------------------------
+\section{Full Pipeline: Jupyter Notebook}
+\label{sec:appx-notebook}
+
+Reproducing the figures and tables in this thesis requires Python~3.9 or
+later with the packages listed in \texttt{requirements.txt}.
+
+\begin{enumerate}[leftmargin=1.8em, label=\textbf{Step \arabic*.}]
+  \item \textbf{Install Python.}
+        Download the Anaconda distribution from
+        \url{https://www.anaconda.com/download} (recommended; includes all
+        scientific packages) or install Python from \url{https://python.org}.
+
+  \item \textbf{Clone or download the repository.}
+        With Git installed: open a terminal and run
+        \begin{center}
+          \texttt{git clone}\\[0.2em]
+          \url{https://github.com/quanbanguyen/solar-interferometry-simulation-project}
+        \end{center}
+        Without Git: click the green \textbf{Code} button on the repository
+        page, then \textbf{Download ZIP}, and extract the archive.
+
+  \item \textbf{Install dependencies.}
+        Open a terminal in the project folder and run:
+        \begin{center}
+          \texttt{pip install -r requirements.txt}
+        \end{center}
+        The required packages are: \texttt{numpy}, \texttt{scipy},
+        \texttt{plotly}, \texttt{pandas}, \texttt{jupyter}, and
+        \texttt{kaleido} (for figure export).
+
+  \item \textbf{Open the notebook.}
+        Run \texttt{jupyter notebook} in the terminal, then open
+        \texttt{the\_newest\_heart\_of\_project.ipynb} in the browser tab that
+        appears.
+
+  \item \textbf{Set the observation date.}
+        In \textbf{Cell~0} (the first code cell), edit two variables:
+        \texttt{NGAY} (date string, format \texttt{DD-MM-YYYY}) and
+        \texttt{DEC\_SUN\_DEG} (solar declination in degrees, obtainable from
+        JPL Horizons as described in Section~\ref{sec:appx-jpl}).  All
+        downstream cells inherit these values automatically.
+
+  \item \textbf{Run all cells.}
+        From the menu bar: \textbf{Kernel} $\to$ \textbf{Restart \& Run All}.
+        The full pipeline completes in under two minutes on a standard laptop
+        and exports all figures and data files automatically.
+\end{enumerate}
+
+% ------------------------------------------------------------------
+\section{Retrieving Solar Declination from NASA JPL Horizons}
+\label{sec:appx-jpl}
+
+The NASA JPL Horizons system~\citep{jpl_horizons} is the authoritative source
+for solar and planetary ephemerides.  The following steps retrieve the solar
+declination $\delta$ for any observation date.
+
+\begin{enumerate}[leftmargin=1.8em, label=\textbf{Step \arabic*.}]
+  \item \textbf{Open the Horizons web interface.}
+        Navigate to \url{https://ssd.jpl.nasa.gov/horizons/} in any browser.
+
+  \item \textbf{Set the target body.}
+        Click the \textbf{Target Body} field, type \texttt{Sun}, and select
+        \textbf{Sun [Sol 10]} from the autocomplete list.
+
+  \item \textbf{Set the observer location.}
+        Click \textbf{Observer Location}, type \texttt{Learmonth} (or enter
+        the coordinates manually: latitude $-22.2^\circ$, longitude
+        $114.1^\circ$E, elevation 0~m).
+
+  \item \textbf{Set the time span.}
+        Under \textbf{Time Specification}, enter the observation date in the
+        \textbf{Start Time} field (e.g.\ \texttt{2025-03-20}) and set the
+        \textbf{Stop Time} one day later (\texttt{2025-03-21}).  Set the
+        \textbf{Step Size} to \texttt{1~day} for a single representative value.
+
+  \item \textbf{Select output quantities.}
+        Under \textbf{Table Settings}, tick \textbf{Apparent RA \& DEC
+        (airless)}, which is quantity~1 in the Horizons menu.  The DEC
+        column is the geocentric solar declination $\delta$.  All other
+        quantities may be left at their defaults.
+
+  \item \textbf{Generate the ephemeris.}
+        Click \textbf{Generate Ephemeris}.  In the output table, locate the
+        column labelled \textbf{DEC} (degrees, arcminutes, arcseconds).  The
+        value on the observation date is $\delta$.  For 20~March~2025
+        (spring equinox) the returned value is $\delta = 0.0^\circ$ to the
+        nearest arcminute.  Enter this value as \texttt{DEC\_SUN\_DEG} in
+        Cell~0 of the notebook.
+\end{enumerate}
+
+\noindent
+\textbf{Note.}  The approximate formula
+$\delta \approx -23.45^\circ\cos\!\bigl(360^\circ(d+10)/365.25\bigr)$
+(where $d$ is the day-of-year) is accurate to within $\pm0.3^\circ$ for most
+dates and is sufficient for the simulation.  JPL Horizons provides
+sub-arcsecond precision and is recommended for validating the approximation
+or for dates near the solstices where the formula error is largest.

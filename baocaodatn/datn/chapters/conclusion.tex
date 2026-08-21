@@ -1,0 +1,242 @@
+% =====================================================================
+%  CONCLUSION AND FUTURE WORK  (unnumbered — HUST convention)
+% =====================================================================
+\chapter*{CONCLUSION AND FUTURE WORK}
+\addcontentsline{toc}{chapter}{CONCLUSION AND FUTURE WORK}
+
+Section~\ref{sec:problem-statement} posed a single question: how can a
+physically grounded, end-to-end simulation be constructed to evaluate the
+feasibility, signal chain, and array-geometry choices of a future low-cost UHF
+solar radio interferometer before hardware deployment? That question was not
+academic. It followed directly from my own preliminary two-element
+deployment at Xuan~Mai (Section~\ref{sec:motivation}), where phase-incoherent
+receivers, cable loss, local RFI, and an under-characterised noise floor
+produced an ambiguous result that could not, on its own, be diagnosed. This
+thesis answered the question by building and validating a complete software
+model of a four-element UHF interferometer at \SI{610}{\mega\hertz}, pursuing
+the four objectives set out in Section~\ref{sec:objectives}: antenna
+modelling, an end-to-end signal pipeline, a general array-geometry
+formulation, and validation against analytic theory and real data. This
+chapter reviews what was achieved against each objective, positions the work
+relative to existing simulators, restates the contributions, and outlines the
+limitations and future extensions that follow.
+
+\section*{1.\quad Summary of Results}
+
+\paragraph{Objective 1 - Antenna modelling.}
+The receiving element, a U-frame folded-dipole Yagi-Uda antenna (HKD G11KD-T2), was
+modelled in 4NEC2 using the Method of Moments and independently cross-checked using HFSS
+(Finite Element Method), directly answering the cross-validation requirement of
+Section~\ref{sec:objectives}. The 4NEC2 solution yielded an input impedance of $(108 - j22)\,\si{\ohm}$, a
+forward gain of \SI{9.48}{dBi}, a half-power beamwidth of $\approx\SI{52}{\degree}$, and
+a standing-wave ratio of $1.55$ at the \SI{75}{\ohm} reference. Direct vector-network-analyser
+measurements at the Xuan~Mai test site confirmed the impedance to within calibration
+uncertainty, and the HFSS solution agreed with 4NEC2 to better than $0.2~\si{dB}$.
+The mutual-coupling study showed that elements are decoupled below $-78~\si{dB}$ at
+\SI{5}{\metre} separation and below $-83~\si{dB}$ at the \SI{8}{\metre} minimum array
+spacing, formally justifying the independent-sensor assumption used throughout the
+pipeline.
+
+\paragraph{Objective 2 - End-to-end signal pipeline.}
+An end-to-end Python pipeline was implemented that converts real SWS Learmonth flux
+into per-antenna complex baseband voltages through the Friis reception relation~\citep{friis1946,tms2017} and
+Johnson-Nyquist thermal noise~\citep{nyquist1928}, applies per-antenna geometric phase derived from the
+ENU$\rightarrow$XYZ$\rightarrow\uvw$ transformation~\citep{tms2017}, cross-correlates to form
+visibilities, and inverts by a vectorised direct DFT to a dirty image. Two complementary
+simulation engines were provided: Engine~A (voltage synthesis, suitable for FPGA export
+validation) and Engine~B (forward-model visibilities, analytically exact and
+computationally fast for array-geometry studies).
+
+\paragraph{Objective 3 - General array geometry.}
+The ENU$\rightarrow$XYZ$\rightarrow\uvw$ formulation was applied identically to every
+array configuration evaluated, from the two-element baseline used for fringe validation
+to sixteen-element random layouts, without any change to the underlying geometry code.
+The parametric sweep exercised this generality directly: five configurations-compact
+east-west, north-south line, tee, graded cross, and random-quantified the trade-off
+between layout and imaging quality, and a sixth, DLITE-inspired triangle-plus-centre layout
+(Case~1.75, Section~\ref{subsec:case175} of Chapter~\ref{ch:pipeline}) showed that a
+minimum-redundancy topology recovers two-dimensional resolution from only four elements.
+The compact east-west array ($b_{\rm max}=\SI{24}{\metre}$) detects the Sun and
+reproduces the correct fringe behaviour but provides only east-west angular resolution.
+The extended graded cross ($b_{\rm max}=\SI{130}{\metre}$) achieves two-dimensional
+UV coverage sufficient to resolve solar structure and reduces the PSF sidelobe level by
+$\approx20~\si{dB}$.
+
+\paragraph{Objective 4 - Validation on 20 March 2025.}
+Run on the spring-equinox transit ($\delta=0.0^\circ$, 12-hour window,
+$H\in[\pm90^\circ]$), the simulated instrument reproduced three independent analytic
+benchmarks: (1) a $\sim$14-minute fringe period on the \SI{8}{\metre} baseline,
+matching Eq.~\eqref{eq:fringeperiod} within the sampling resolution; (2) a
+$\jinc$-shaped visibility amplitude versus baseline length, including the position of
+the first null, confirming that the van Cittert-Zernike relation~\citep{tms2017,taylor1999synthesis} is correctly
+implemented; and (3) a dirty image numerically identical (to machine precision) to the
+input sky convolved with the independently computed PSF. Agreement on all three
+benchmarks simultaneously, using real flux as input, validates the internal
+consistency of the pipeline at the analytic level and directly answers the
+feasibility question of Section~\ref{sec:problem-statement}: yes, such a simulation
+can be built, and it behaves as theory predicts.
+
+\paragraph{Closing the loop on the Xuan~Mai motivation.}
+Validating the pipeline at the analytic level is not the same as explaining why the
+original field hardware failed, so the simulation was also compared directly against
+the two-element analogue trace recorded at Hoa~Lac on the same date
+(Section~\ref{sec:real-comparison} of Chapter~\ref{ch:results}). The comparison
+attributed the $23.8\times$ gap in measured solar excess to an elevated effective
+receiver system temperature ($T_{\rm sys,eff}\approx\SI{3\,600}{\kelvin}$, versus the
+\SI{150}{\kelvin} idealised model), and a separate clock-coherence study
+(Section~\ref{sec:clock-offset}) showed that a consumer oscillator drift of
+$\xi\approx1$~ppm alone would zero the fringe amplitude regardless of receiver noise.
+Together these two, independent diagnoses give a quantitative answer to the question
+that motivated this thesis: the Xuan~Mai deployment was not undermined by a flawed
+concept, but by an uncalibrated low-noise amplifier and the absence of a shared clock
+reference-both addressable with modest, identifiable hardware additions.
+
+\section*{2.\quad Position Relative to Existing Simulators}
+
+The most widely used open-source aperture-synthesis simulator, \textsc{APSYNSIM}~\cite{apsynsim},
+provides a real-time interactive GUI that is excellent for teaching. This thesis occupies
+a complementary but distinct niche, differentiated from \textsc{APSYNSIM} on four axes:
+
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Real data.} The pipeline ingests archived solar flux from the Learmonth
+        observatory rather than a synthetic Gaussian sky model. The source of truth is
+        the Sun itself.
+  \item \textbf{Real antenna beam.} The primary beam is the actual 4NEC2 Yagi pattern
+        (loaded from a pre-computed \texttt{.npz} file), not the Rayleigh-criterion
+        Gaussian. As shown in Chapter~\ref{ch:results}, this difference accounts for
+        $\approx25\,\%$ ($\sim\!1~\si{dB}$) more integrated transit power relative to
+        the Gaussian approximation.
+  \item \textbf{Physics-based noise.} The noise model is grounded in the Johnson-Nyquist
+        thermodynamic formula~\citep{nyquist1928}, not an empirical scale factor. The system temperature
+        $T_{\rm sys}=\SI{150}{\kelvin}$ and bandwidth $\Delta\nu=\SI{1}{\mega\hertz}$
+        are physical quantities that can be measured and that determine the minimum
+        detectable flux density from first principles.
+  \item \textbf{Reproducibility and hardware path.} The Jupyter notebook constitutes a
+        complete, version-controlled, re-runnable record of the simulation. The
+        16-bit IQ quantisation stage and LSB-validation check provide a direct path
+        to an FPGA hardware correlator-a direction that \textsc{APSYNSIM} does not
+        pursue.
+\end{itemize}
+
+\section*{3.\quad Contributions}
+
+Matching the five contributions claimed in Section~\ref{sec:contributions-intro}, this
+thesis delivers:
+
+\begin{enumerate}[leftmargin=1.8em]
+  \item \textbf{A validated 4NEC2 antenna model} of a low-cost commercial UHF
+        Yagi-Uda element, cross-checked against direct measurement and an independent
+        FEM solution, with a quantitative mutual-coupling study confirming element
+        independence across the operational baselines.
+  \item \textbf{An end-to-end interferometry simulation engine} that is correct for
+        arbitrary two-dimensional array geometries through a single, consistent $\uvw$
+        formulation applied identically to per-antenna phase delay, baseline projection,
+        and fringe stopping.
+  \item \textbf{A real-data-driven validation} demonstrating that the simulated
+        instrument, driven by archived Learmonth \SI{610}{\mega\hertz} flux, reproduces
+        the classical analytic signatures of aperture synthesis-fringe period, $\jinc$
+        visibility, dirty-image consistency-simultaneously and on real data.
+  \item \textbf{A structured comparison with \textsc{APSYNSIM}} identifying four concrete
+        respects (real data, real antenna beam, physics-based noise, and a reproducible
+        hardware-export path) in which this pipeline extends beyond a purely
+        educational simulator.
+  \item \textbf{A reproducible, single-notebook workflow} that takes a user from an
+        archived SWS daily file to a calibrated dirty image in under two minutes of
+        computation, with all parameters controlled from a single configuration cell
+        and all results exported automatically.
+\end{enumerate}
+
+\section*{4.\quad Limitations}
+
+The present implementation makes the following simplifications, each well-justified
+for the validation scope of this work but worth noting for future extensions:
+the noise model assumes a frequency-flat system temperature and ignores $1/f$ gain
+fluctuations; bandwidth smearing is negligible at $\Delta\nu/\nu=1.6\times10^{-3}$
+but would become significant for wider channels; ionospheric differential phase is
+sub-degree for the baselines used but would need modelling for longer baselines or
+solar-storm conditions; no Jones-matrix mutual-coupling correction is applied (the
+coupling is $<-78~\si{dB}$, making this contribution negligible); the imaging
+stage produces a dirty image rather than a deconvolved sky map; and the voltage
+model assumes perfect clock synchronisation ($\tau_k=0$ for all antennas), whereas
+real digitisers require a common phase reference to prevent fringe washing
+(Section~\ref{sec:clock-offset}). All six limitations point directly to concrete
+extensions.
+
+\section*{5.\quad Future Work}
+
+Several extensions follow naturally from this work:
+
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{FPGA hardware correlator.} The voltage-chain engine already exports
+        16-bit IQ samples in hexadecimal format with a validated noise floor of at
+        least 20 LSBs. The immediate next step is to stream these samples to an FPGA
+        cross-correlator board and compare the hardware fringe amplitude with the
+        software result sample-by-sample, providing an end-to-end hardware-in-the-loop
+        validation.
+  \item \textbf{Physical array upgrade, following the DLITE precedent.} The parametric
+        sweep quantified the imaging gain from extending the compact east-west baseline
+        set to a graded cross with $b_{\rm max}=\SI{130}{\metre}$, and the Case~1.75
+        evaluation (Section~\ref{subsec:case175} of Chapter~\ref{ch:pipeline}) showed
+        that a DLITE-inspired~\citep{helmboldt2021dlite} triangle-plus-centre layout
+        recovers two-dimensional resolution from exactly four elements, the same count
+        used throughout this thesis; this is not a full DLITE system simulation, only
+        the minimum-redundancy topology, evaluated at \SI{610}{\mega\hertz} rather than
+        DLITE's \SIrange{30}{40}{\mega\hertz} band. Deploying four low-cost LWA-style
+        crossed-dipole antennas~\citep{lwa_pricing} at Xuan~Mai or another site in this
+        minimum-redundancy arrangement, mirroring the motivation of
+        Section~\ref{sec:motivation}, would turn the present detection instrument into a
+        genuine solar imager capable of resolving burst sources to a fraction of the
+        solar radius.
+  \item \textbf{Solar burst recording.} The present pipeline was validated on the
+        quiet-Sun continuum. Replacing the quiet-Sun SWS input with a recorded
+        Type~II or Type~III burst event would test the pipeline's transient response
+        and demonstrate the dynamic-range headroom shown in Table~\ref{tab:detectability}.
+  \item \textbf{Multi-frequency operation.} The SWS Learmonth archive covers eight
+        spectral channels from \SI{245}{\mega\hertz} to \SI{2695}{\mega\hertz}.
+        Extending the pipeline to a multi-channel mode would enable spectro-spatial
+        imaging, tracing a burst's frequency drift (and hence electron beam velocity)
+        across the corona.
+  \item \textbf{\textsc{clean} deconvolution.} Implementing H\"ogbom~\citep{hogbom1974} or
+        multi-scale \textsc{clean} as an optional final stage would recover the true
+        sky brightness and achieve the noise-limited dynamic range of
+        Table~\ref{tab:detectability}, rather than the PSF-sidelobe-limited range of
+        the current dirty image.
+  \item \textbf{Wider-field imaging and $w$-projection.} For baselines beyond
+        $\SI{130}{\metre}$ or field-of-view extensions to tens of degrees, the flat-sky
+        approximation breaks down and $w$-projection or faceting must be incorporated.
+  \item \textbf{Real-time operation.} The pipeline is currently a post-processing tool.
+        Rewriting the correlator stage as a streaming Python process (e.g.\ using
+        \texttt{asyncio} or a GPU back-end) would enable real-time image updates
+        at the cadence of the SWS one-second data rate.
+  \item \textbf{Jones-matrix calibration.} Even though mutual coupling is $<-78~\si{dB}$
+        at the operating baselines, incorporating a Jones-matrix element-pattern correction
+        would allow the simulator to be used for precision polarimetry experiments at
+        shorter baselines.
+  \item \textbf{Phase-coherent clock reference.}
+        The clock-offset sensitivity study of Chapter~\ref{ch:results}
+        (Section~\ref{sec:clock-offset}) showed that a differential oscillator drift of
+        $\xi=1$~ppm, typical of a consumer RTL-SDR crystal, produces a coherence
+        time $\Delta t_{\rm coh}\approx\SI{1.6}{\milli\second}$ at \SI{610}{\mega\hertz},
+        four orders of magnitude shorter than the \SI{43.2}{\second} integration dump.
+        Digital cross-correlation between unsynchronised digitisers therefore yields zero
+        fringe amplitude regardless of SNR.  The required hardware addition is a
+        GPS-disciplined oscillator (GPSDO, $\xi\lesssim1$~ppt) or a shared
+        \SI{10}{\mega\hertz} reference signal distributed to all ADC clock inputs.
+        The simulation pipeline can extend this study by sweeping
+        \texttt{CLOCK\_OFFSET\_NS} and a new \texttt{DRIFT\_PPM} parameter to produce
+        a two-dimensional coherence map ($\xi$, $\Delta t_{\rm dump}$) that
+        directly specifies the clock-subsystem tolerance budget for the hardware
+        correlator design.
+\end{itemize}
+
+Returning to the question posed in Section~\ref{sec:problem-statement}: this thesis
+shows that a physically grounded, end-to-end simulation can indeed be built to evaluate
+the feasibility, signal chain, and array-geometry choices of a low-cost UHF solar radio
+interferometer before hardware deployment, and that doing so turns an ambiguous field
+failure into a specific, addressable list of hardware requirements. The work delivers a
+faithful, reproducible, and real-data-driven model validated from incident flux to final
+dirty image, positioned relative to the open-source simulation landscape, and it provides
+a solid, well-documented foundation for the four-element DLITE-inspired array upgrade
+motivated in Section~\ref{sec:motivation} and for future extensions toward imaging,
+burst science, and real-time operation.
+\clearpage
